@@ -1,0 +1,2137 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Milestone Plan Dashboard</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Supabase client (global is window.supabase) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    :root{
+      --bg:#f3f4f6;
+      --card:#ffffff;
+      --ink:#111827;
+      --muted:#6b7280;
+      --line:#e5e7eb;
+      --dark:#111827;
+      --primary:#2563eb;
+      --danger:#dc2626;
+      --good:#16a34a;
+      --amber:#d97706;
+      --bad:#b91c1c;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--bg);
+      margin: 0;
+      color: var(--ink);
+    }
+
+    header {
+      background: var(--dark);
+      color: #f9fafb;
+      padding: 1rem;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1rem;
+      position: sticky;
+      top: 0;
+      z-index: 20;
+    }
+
+    header strong { font-size: 1.05rem; }
+
+    header .right {
+      display: flex;
+      gap: .5rem;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    button {
+      border: 0;
+      border-radius: .6rem;
+      padding: .5rem .75rem;
+      cursor: pointer;
+      font-weight: 700;
+    }
+
+    button:disabled { opacity: .6; cursor: not-allowed; }
+
+    .btn { background: #ffffff; color: var(--ink); }
+    .btn-danger { background: var(--danger); color: #fff; }
+    .btn-primary { background: var(--primary); color: #fff; }
+    .btn-ghost { background: transparent; color: #fff; border: 1px solid rgba(255,255,255,.25); }
+
+    .tabs {
+      display: flex;
+      gap: .5rem;
+      padding: .5rem;
+      background: #e5e7eb;
+      flex-wrap: wrap;
+    }
+
+    .tab {
+      background: white;
+      padding: .45rem .75rem;
+      border-radius: .75rem;
+      cursor: pointer;
+      border: 1px solid var(--line);
+      font-weight: 700;
+      display: inline-flex;
+      gap: .5rem;
+      align-items: center;
+    }
+
+    .tab.active {
+      border-color: var(--dark);
+      box-shadow: 0 1px 0 rgba(0,0,0,.08);
+    }
+
+    .tab .badge {
+      font-size: .75rem;
+      padding: .1rem .45rem;
+      border-radius: 999px;
+      background: #f3f4f6;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    main {
+      padding: 1rem;
+      max-width: 1300px;
+      margin: auto;
+    }
+
+    .grid {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      align-items: stretch;
+    }
+
+    @media (max-width: 1100px) {
+      .grid { grid-template-columns: 1fr; }
+    }
+
+    .card {
+      background: var(--card);
+      border-radius: 1rem;
+      padding: 1rem;
+      border: 1px solid var(--line);
+      box-shadow: 0 1px 0 rgba(0,0,0,.04);
+      margin-bottom: 1rem;
+    }
+
+    .muted { color: var(--muted); }
+
+    .controls {
+      display: flex;
+      gap: .5rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .kpis {
+      display: flex;
+      gap: .5rem;
+      flex-wrap: wrap;
+      align-items: center;
+      margin-top: .5rem;
+    }
+
+    .kpi {
+      background: #f3f4f6;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: .25rem .6rem;
+      font-size: .85rem;
+      font-weight: 800;
+    }
+
+    .task {
+      background: white;
+      padding: .75rem;
+      border-radius: .9rem;
+      margin-bottom: .6rem;
+      display: grid;
+      grid-template-columns: 48px 1fr 260px;
+      gap: .75rem;
+      align-items: center;
+      border: 1px solid var(--line);
+      position: relative;
+      overflow: hidden;
+    }
+
+    /* RAG overlays as subtle left borders */
+    .task.rag-green { border-left: 6px solid #16a34a; }
+    .task.rag-amber { border-left: 6px solid #f59e0b; }
+    .task.rag-red { border-left: 6px solid #ef4444; }
+
+    .taskNum {
+      font-weight: 900;
+      font-size: 1.05rem;
+      text-align: center;
+      color: #111827;
+    }
+
+    .taskTitle {
+      font-weight: 800;
+      margin-bottom: .15rem;
+    }
+
+    .taskMeta { font-size: .9rem; }
+
+    input[type="datetime-local"] {
+      padding: .42rem .5rem;
+      border-radius: .6rem;
+      border: 1px solid #d1d5db;
+      font: inherit;
+      width: 100%;
+      max-width: 260px;
+    }
+
+    .complete {
+      background: var(--good);
+      color: white;
+      border: none;
+      border-radius: .6rem;
+      padding: .42rem .6rem; /* smaller */
+      cursor: pointer;
+      font-weight: 900;
+      font-size: .9rem;
+      width: 100%;
+      white-space: nowrap;
+    }
+
+    .complete.done {
+      background: #22c55e;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: .35rem;
+      padding: .18rem .55rem;
+      border-radius: 999px;
+      font-size: .8rem;
+      font-weight: 900;
+      background: #f3f4f6;
+      color: var(--ink);
+      border: 1px solid var(--line);
+      margin-left: .35rem;
+    }
+
+    .pill-green { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+    .pill-red { background: #fee2e2; color: #991b1b; border-color: #fecaca; }
+    .pill-amber { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+
+    
+    .pill-branch { background: #dbeafe; color: #1e3a8a; border-color: #bfdbfe; }
+    .pill-na { background:#f3f4f6; color:#4b5563; border-color:#e5e7eb; }
+
+    /* Flow zoom */
+    .zoomCtl { display:inline-flex; gap:.35rem; align-items:center; }
+    .zoomLabel { font-size:.85rem; color: var(--muted); font-weight: 900; }
+    #flowViewport { width:100%; height:520px; overflow:auto; }
+    #flowSvg { display:block; }
+.warn {
+      background: #fff7ed;
+      border: 1px solid #fed7aa;
+      color: #9a3412;
+      padding: .75rem;
+      border-radius: .75rem;
+      margin-top: .75rem;
+      font-size: .92rem;
+    }
+
+    .subtasks {
+      margin-top: .55rem;
+      border-top: 1px dashed var(--line);
+      padding-top: .55rem;
+      display: grid;
+      gap: .35rem;
+    }
+
+    .subrow {
+      display: grid;
+      grid-template-columns: 62px 1fr 140px;
+      gap: .5rem;
+      align-items: center;
+      background: #fafafa;
+      border: 1px solid var(--line);
+      border-radius: .75rem;
+      padding: .45rem .55rem;
+    }
+
+    .subid { font-weight: 900; color: #111827; }
+
+    .subbtn {
+      background: #111827;
+      color: white;
+      padding: .35rem .55rem;
+      border-radius: .6rem;
+      font-weight: 900;
+      font-size: .85rem;
+    }
+
+    .subbtn.done { background: #10b981; }
+
+    .mini {
+      font-size: .85rem;
+      padding: .35rem .55rem;
+      border-radius: .6rem;
+      font-weight: 900;
+    }
+
+    .mini.primary { background: var(--primary); color: #fff; }
+    .mini.light { background: #f3f4f6; border: 1px solid var(--line); color: var(--ink); }
+
+    /* Flowchart */
+    .canvasWrap {
+      border: 1px solid var(--line);
+      border-radius: 1rem;
+      overflow: hidden;
+      background: linear-gradient(#ffffff, #ffffff);
+    }
+
+    .canvasHeader {
+      padding: .75rem 1rem;
+      border-bottom: 1px solid var(--line);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: .75rem;
+      flex-wrap: wrap;
+    }
+
+    .canvasHeader .left {
+      display:flex;
+      gap:.5rem;
+      align-items:center;
+      flex-wrap: wrap;
+    }
+
+    .canvas {
+      width: 100%;
+      height: 520px;
+      display: block;
+      background-image:
+        radial-gradient(#e5e7eb 1px, transparent 1px);
+      background-size: 16px 16px;
+    }
+
+    .legend {
+      font-size: .85rem;
+      color: var(--muted);
+    }
+
+    .searchRow {
+      display:flex;
+      gap:.5rem;
+      flex-wrap: wrap;
+      align-items:center;
+      margin-top:.5rem;
+    }
+
+    .searchRow input[type="text"]{
+      padding: .45rem .55rem;
+      border-radius: .6rem;
+      border: 1px solid #d1d5db;
+      font: inherit;
+      min-width: 240px;
+      flex: 1;
+    }
+
+    .memList {
+      display: grid;
+      gap: .5rem;
+      margin-top: .75rem;
+    }
+
+    .memItem {
+      border: 1px solid var(--line);
+      border-radius: .9rem;
+      padding: .75rem;
+      background: #fff;
+      display:flex;
+      justify-content: space-between;
+      gap: .75rem;
+      flex-wrap: wrap;
+      align-items: center;
+    }
+
+    .memItem .title { font-weight: 900; }
+
+    .memItem .meta { color: var(--muted); font-size: .9rem; }
+
+    @media (max-width: 900px) {
+      .task { grid-template-columns: 40px 1fr; }
+      .task > :nth-child(3) { grid-column: 1 / -1; }
+    }
+  
+    /* Progress bar + settings */
+    .progRow{ margin-top:.6rem; display:grid; gap:.35rem; }
+    .progLabel{ font-size:.9rem; color: var(--muted); font-weight:700; }
+    .progBar{ width:100%; height:10px; background:#e5e7eb; border-radius:999px; overflow:hidden; }
+    .progFill{ height:100%; background: var(--primary); width:0%; }
+
+    .settingsGrid{ display:grid; grid-template-columns: 1fr 1fr; gap: .75rem; margin-top: .75rem; }
+    .setting{ border:1px solid var(--line); border-radius: .9rem; padding:.75rem; background:#fff; }
+    .setting label{ display:block; font-size:.8rem; color: var(--muted); font-weight:800; margin-bottom:.35rem; }
+    .setting input[type="number"], .setting input[type="text"]{ width:100%; padding:.5rem .6rem; border:1px solid #d1d5db; border-radius:.65rem; font:inherit; }
+    .cmdGrid{ display:grid; grid-template-columns: 1fr 1fr; gap:.5rem; }
+    .spark{ margin-top:.4rem; height:56px; }
+
+    @media (max-width: 900px){
+      .settingsGrid{ grid-template-columns: 1fr; }
+      .cmdGrid{ grid-template-columns: 1fr; }
+    }
+
+  </style>
+</head>
+<body>
+
+<header>
+  <strong>Milestone Plan Dashboard</strong>
+  <div class="right">
+    <button class="btn-ghost" id="btnViewOpen" onclick="setView('open')">Open</button>
+    <button class="btn-ghost" id="btnViewMemory" onclick="setView('memory')">Memory</button>
+    <button class="btn" onclick="refreshAll()">Refresh</button>
+    <button class="btn-primary" onclick="createPlanPrompt()">New Plan</button>
+    <button class="btn-danger" onclick="closePlan()">Close Incident</button>
+  </div>
+</header>
+
+<div class="tabs" id="tabs"></div>
+
+<main>
+  <div id="openView">
+    <div>
+      <div class="card">
+        <h2 id="planTitle" style="margin:0 0 .25rem 0;"></h2>
+        <div id="planDesc" class="muted"></div>
+
+        
+        <div class="kpis">
+          <span class="kpi" id="kpiStatus">Status: -</span>
+        </div>
+
+        <div class="progRow">
+          <div class="progLabel" id="kpiProgress">Progress: 0%</div>
+          <div class="progBar"><div class="progFill" id="progFill" style="width:0%"></div></div>
+        </div>
+
+        <div class="settingsGrid">
+          <div class="setting">
+            <label>Time float (hours)</label>
+            <input id="floatHours" type="number" min="0" step="0.25" value="0" oninput="saveSettingsDebounced()" />
+            <div class="muted" id="timingHealthLine">Set a float to calculate health.</div>
+            <div id="timingSpark" class="spark"></div>
+          </div>
+          <div class="setting">
+            <label>Command structure</label>
+            <div class="cmdGrid">
+              <input id="tpicName" type="text" placeholder="TPIC name" oninput="saveSettingsDebounced()" />
+              <input id="tpicPhone" type="text" placeholder="TPIC phone" oninput="saveSettingsDebounced()" />
+              <input id="mmicName" type="text" placeholder="MMIC name" oninput="saveSettingsDebounced()" />
+              <input id="mmicPhone" type="text" placeholder="MMIC phone" oninput="saveSettingsDebounced()" />
+            </div>
+            <div id="settingsWarn" class="warn" style="display:none; margin-top:.5rem;"></div>
+          </div>
+        </div>
+
+        <div class="controls" style="margin-top:.75rem;">
+          <button id="btnAddTask" class="btn-primary" onclick="addTask()">Add Task</button>
+          <span id="statusLine" class="muted"></span>
+        </div>
+
+        <div id="setupWarning" class="warn" style="display:none;"></div>
+      </div>
+
+      <div id="taskList"></div>
+    </div>
+
+
+  
+  </div>
+
+<div id="memoryView" style="display:none;">
+    <div class="card">
+      <h2 style="margin:0;">Memory</h2>
+      <div class="muted" style="margin-top:.25rem;">Closed plans, read-only. You can clone them to avoid reinventing the wheel.
+        The wheel will still be on fire, but at least it’s familiar.</div>
+
+      <div class="searchRow">
+        <input id="memSearch" type="text" placeholder="Search titles/descriptions..." oninput="loadMemory()" />
+        <button class="btn" onclick="loadMemory()">Search</button>
+      </div>
+
+      <div id="memList" class="memList"></div>
+      <div id="memWarn" class="warn" style="display:none;"></div>
+    </div>
+  </div>
+</main>
+
+<script>
+  // ===== Supabase config =====
+  const SUPABASE_URL = "https://ungtmfwxqawkdiflmora.supabase.co";
+  const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVuZ3RtZnd4cWF3a2RpZmxtb3JhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIxMDY4NjQsImV4cCI6MjA3NzY4Mjg2NH0.Yaq0XfbbkwxJDUoiPCS7bLVBy70Wa-NOOWIxkpRRxdc";
+  const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // ===== App state =====
+  
+
+  // ===== Plan settings (float + command structure) =====
+  // Stored in a simple table 'plan_settings' if present.
+  // If you haven't created it yet, run this in Supabase SQL editor:
+  // create table if not exists plan_settings(
+  //   plan_id uuid primary key references plans(id) on delete cascade,
+  //   float_hours numeric default 0,
+  //   tpic_name text, tpic_phone text,
+  //   mmic_name text, mmic_phone text,
+  //   updated_at timestamptz default now()
+  // );
+
+  let settingsCache = {};
+  let saveTimer = null;
+
+  function getSettingsInputs(){
+    return {
+      float_hours: Number(document.getElementById('floatHours')?.value || 0),
+      tpic_name: (document.getElementById('tpicName')?.value || '').trim(),
+      tpic_phone: (document.getElementById('tpicPhone')?.value || '').trim(),
+      mmic_name: (document.getElementById('mmicName')?.value || '').trim(),
+      mmic_phone: (document.getElementById('mmicPhone')?.value || '').trim(),
+    };
+  }
+
+  function applySettingsToUI(s){
+    if (!s) s = {};
+    const fh = document.getElementById('floatHours');
+    if (fh) fh.value = String((Number(s.float_hours||0) || (Number(s.float_minutes||0)/60) || 0));
+    const tn = document.getElementById('tpicName'); if (tn) tn.value = s.tpic_name || '';
+    const tp = document.getElementById('tpicPhone'); if (tp) tp.value = s.tpic_phone || '';
+    const mn = document.getElementById('mmicName'); if (mn) mn.value = s.mmic_name || '';
+    const mp = document.getElementById('mmicPhone'); if (mp) mp.value = s.mmic_phone || '';
+  }
+
+  async function loadPlanSettings(){
+    const warn = document.getElementById('settingsWarn');
+    if (warn) warn.style.display = 'none';
+    if (!activePlan) return;
+    try{
+      const { data, error } = await supabaseClient.from('plan_settings').select('*').eq('plan_id', activePlan.id).maybeSingle();
+      if (error) throw error;
+      settingsCache[activePlan.id] = data || { plan_id: activePlan.id, float_hours: 0 };
+      applySettingsToUI(settingsCache[activePlan.id]);
+    }catch(e){
+      settingsCache[activePlan.id] = settingsCache[activePlan.id] || { plan_id: activePlan.id, float_hours: 0 };
+      applySettingsToUI(settingsCache[activePlan.id]);
+      if (warn) {
+        warn.style.display='block';
+        warn.textContent = 'Settings are not saving yet. Create table plan_settings in Supabase (see SQL comment in file).';
+      }
+    }
+  }
+
+  function saveSettingsDebounced(){
+    if (!activePlan) return;
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(savePlanSettings, 450);
+  }
+
+  async function savePlanSettings(){
+    if (!activePlan) return;
+    const inputs = getSettingsInputs();
+    const payload = {
+      plan_id: activePlan.id,
+      float_minutes: Math.round((inputs.float_hours||0) * 60),
+      tpic_name: inputs.tpic_name,
+      tpic_phone: inputs.tpic_phone,
+      mmic_name: inputs.mmic_name,
+      mmic_phone: inputs.mmic_phone,
+      updated_at: new Date().toISOString()
+    };
+    settingsCache[activePlan.id] = payload;
+    const warn = document.getElementById('settingsWarn');
+    try{
+      const { error } = await supabaseClient.from('plan_settings').upsert(payload, { onConflict: 'plan_id' });
+      if (error) throw error;
+      if (warn) warn.style.display='none';
+    }catch(e){
+      if (warn) {
+        warn.style.display='block';
+        warn.textContent = 'Settings not saved (missing plan_settings table or RLS). Run the SQL stub in the file.';
+      }
+    }
+    updateTimingHealth();
+  }
+
+  function minutesDiff(aIso, bIso){
+    if (!aIso || !bIso) return null;
+    const a = new Date(aIso).getTime();
+    const b = new Date(bIso).getTime();
+    if (!isFinite(a) || !isFinite(b)) return null;
+    return Math.round((a - b) / 60000);
+  }
+
+  function getTrackableTaskIds(){
+    // Default: only MAIN tasks count toward progress (branches are contingencies)
+    const mainIds = (branchInfoCache && branchInfoCache.main && branchInfoCache.main.size)
+      ? new Set(Array.from(branchInfoCache.main))
+      : new Set(tasksCache.map(t=>t.id));
+
+    // Exclude N/A main tasks
+    const track = new Set(tasksCache.filter(t => mainIds.has(t.id) && !t.is_na).map(t=>t.id));
+
+    // If a branch line has been ACTIVATED, include its tasks in progress.
+    if (branchActiveGroups && branchActiveGroups.size){
+      branchActiveGroups.forEach(function(gk){
+        const g = branchGroups.get(gk);
+        if (!g || !g.taskIds) return;
+        g.taskIds.forEach(function(tid){ track.add(tid); });
+      });
+    }
+
+    return track;
+  }
+
+  function updateProgressBar(){
+    const fill = document.getElementById('progFill');
+    const label = document.getElementById('kpiProgress');
+    if (!fill || !label) return;
+
+    const trackable = getTrackableTaskIds();
+    const total = trackable.size;
+    const done = tasksCache.filter(t => trackable.has(t.id) && !!t.completed_at).length;
+    const pct = total ? Math.round((done/total)*100) : 0;
+
+    fill.style.width = pct + '%';
+    label.textContent = 'Progress: ' + pct + '% (' + done + '/' + total + ')';
+  }
+
+
+  function updateTimingHealth(){
+    const line = document.getElementById('timingHealthLine');
+    const spark = document.getElementById('timingSpark');
+    if (!line || !spark) return;
+    if (!activePlan){ line.textContent = 'Set a float to calculate health.'; spark.innerHTML=''; return; }
+
+    const settings = settingsCache[activePlan.id] || { float_hours: 0, float_minutes: 0 };
+    const floatMin = (settings.float_hours != null) ? Math.round(Number(settings.float_hours||0)*60) : Number(settings.float_minutes||0);
+
+    const trackable = getTrackableTaskIds();
+
+    const completedSeries = tasksCache
+      .filter(t => trackable.has(t.id) && t.completed_at && t.predicted_time)
+      .sort((a,b) => (a.task_number||0)-(b.task_number||0))
+      .map(t => minutesDiff(t.completed_at, t.predicted_time))
+      .filter(v => typeof v === 'number');
+
+    if (!completedSeries.length){
+      line.textContent = floatMin ? `No completed milestones with predictions yet. Float set: ${floatMin}m.` : 'Set a float to calculate health.';
+      spark.innerHTML='';
+      return;
+    }
+
+    const last = completedSeries[completedSeries.length-1];
+    const down = last > 0;
+    const remaining = floatMin - (down ? last : 0);
+
+    line.textContent = down
+      ? `${last} min down against timings with float of ${floatMin}m (${Math.max(0,remaining)}m remaining)`
+      : `${Math.abs(last)} min up against timings with float of ${floatMin}m`;
+
+    const maxAbs = Math.max(10, ...completedSeries.map(v => Math.abs(v)));
+const w = 280, h = 56, pad = 6;
+const xStep = completedSeries.length > 1
+  ? (w - 2 * pad) / (completedSeries.length - 1)
+  : 0;
+const yMid = h / 2;
+const yScale = (h / 2 - pad) / maxAbs;
+    const pts = completedSeries.map((v,i)=>{
+      const x = pad + i*xStep;
+      const y = yMid + (v * yScale);
+      return [x,y];
+    });
+    const d = pts.map((p,i)=> (i? 'L':'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
+    const color = down ? '#b91c1c' : '#16a34a';
+    spark.innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+      <line x1="0" y1="${yMid}" x2="${w}" y2="${yMid}" stroke="#e5e7eb" stroke-width="1"/>
+      <path d="${d}" fill="none" stroke="${color}" stroke-width="2"/>
+      <circle cx="${pts[pts.length-1][0].toFixed(1)}" cy="${pts[pts.length-1][1].toFixed(1)}" r="3" fill="${color}"/>
+    </svg>`;
+  }
+
+let activePlan = null;
+  let currentView = 'open';
+  let tasksCache = [];        // tasks for active plan
+  let subtasksCache = {};     // task_id -> subtasks[]
+  let edgesCache = [];        // edges for active plan
+
+  // Flow zoom (no, you can't have infinite canvas for free)
+  let flowZoom = 1;
+
+  // Flow visibility (task list first, pretty diagram second)
+  let flowVisible = false;
+
+  function setFlowVisibility(){ /* removed */ }
+
+  function toggleFlow(){ /* Flow removed */ }
+  // Cached branch map for styling
+  let branchInfoCache = { main: new Set(), branchLabel: new Map(), edgesToDraw: [] };
+
+  // Branch grouping + collapse state
+  // A branch is ONLY created when a MAIN task links to another task via a LABELED edge.
+  // This prevents every task being tagged as 'branch' when you haven't actually branched.
+  let branchGroups = new Map();          // groupKey -> { originTaskId, originTaskNumber, label, taskIds:Set }
+  let branchByOrigin = new Map();        // originTaskId -> [groupKey,...]
+  let branchTaskMeta = new Map();        // taskId -> { groupKey, originTaskNumber, label, seq }
+  let collapsedBranchGroups = new Set(); // groupKeys hidden
+
+
+  // Branch activation state (contingency lines only count when activated)
+  let branchActiveGroups = new Set(); // Set of groupKey(origin::label)
+
+  function makeGroupKey(originTaskId, label){
+    return String(originTaskId) + '::' + String(label || '').trim();
+  }
+
+  async function loadBranchStates(){
+    branchActiveGroups = new Set();
+    if (!activePlan) return;
+    try{
+      const { data, error } = await supabaseClient
+        .from('plan_branch_states')
+        .select('origin_task_id,label,is_active')
+        .eq('plan_id', activePlan.id)
+        .eq('is_active', true);
+      if (error) throw error;
+      (data||[]).forEach(r=>{
+        if (r.is_active) branchActiveGroups.add(makeGroupKey(r.origin_task_id, r.label));
+      });
+    }catch(e){
+      // Table may not exist yet. UI still works; activation will be local only.
+    }
+  }
+
+  async function activateBranchLine(groupKeyStr){
+    const g = branchGroups.get(groupKeyStr);
+    if (!activePlan || !g) return;
+
+    // Persist activation (ignore errors if table missing)
+    try{
+      const { error } = await supabaseClient
+        .from('plan_branch_states')
+        .upsert({
+          plan_id: activePlan.id,
+          origin_task_id: g.originTaskId,
+          label: g.label,
+          is_active: true,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'plan_id,origin_task_id,label' });
+      if (error) throw error;
+    }catch(e){ /* ignore */ }
+
+    // Mark main tasks AFTER divergence as N/A
+    try{
+      const toNaIds = tasksCache
+        .filter(t => branchInfoCache.main.has(t.id) && !t.is_na && Number(t.task_number||0) > Number(g.originTaskNumber||0))
+        .map(t => t.id);
+
+      if (toNaIds.length){
+        const { error } = await supabaseClient
+          .from('tasks')
+          .update({ is_na: true })
+          .in('id', toNaIds);
+        if (error) throw error;
+      }
+    }catch(e){
+      // tasks table may not have is_na yet
+    }
+
+    branchActiveGroups.add(groupKeyStr);
+    collapsedBranchGroups.delete(groupKeyStr);
+
+    await loadEverythingForActivePlan();
+  }
+
+
+  function buildEffectiveEdges() {
+    // Combine saved edges with a sensible default mainline so tasks don't become orphaned.
+    // Default mainline = sequential task_number chain when no explicit link exists.
+    const tasksSorted = tasksCache.slice().sort((a,b)=>a.task_number-b.task_number);
+    const existing = (edgesCache || []).slice();
+
+    // Build quick lookup for "any edge from A to B" (labelled or not)
+    const hasEdge = new Set(existing.map(e => `${e.from_task_id}|${e.to_task_id}`));
+
+    // Any task with an incoming labeled edge is considered part of a branch.
+    const incomingLabeled = new Set(existing.filter(e => (e.label || '').trim()).map(e => e.to_task_id));
+
+    const defaults = [];
+    for (let i = 0; i < tasksSorted.length - 1; i++) {
+      const a = tasksSorted[i];
+      const b = tasksSorted[i+1];
+      const key = `${a.id}|${b.id}`;
+      if (!hasEdge.has(key) && !incomingLabeled.has(a.id) && !incomingLabeled.has(b.id)) {
+        defaults.push({ from_task_id: a.id, to_task_id: b.id, label: '' });
+      }
+    }
+
+    // Return saved edges first, then defaults (defaults are UI-only)
+    return existing.length ? existing.concat(defaults) : defaults;
+  }
+
+
+  function recomputeBranchCache() {
+    const edgesToUse = buildEffectiveEdges();
+
+    // main path calculation (used by the flow, and to keep list sane)
+    branchInfoCache = (() => { const edgesToUse = buildEffectiveEdges(); const info = computeBranchInfo(tasksCache, edgesToUse); return { ...info, edgesToUse }; })();
+
+    branchGroups = new Map();
+    branchByOrigin = new Map();
+    branchTaskMeta = new Map();
+
+    const taskById = new Map(tasksCache.map(t => [t.id, t]));
+    const outgoing = new Map();
+    tasksCache.forEach(t => outgoing.set(t.id, []));
+    edgesToUse.forEach(e => {
+      if (!outgoing.has(e.from_task_id)) outgoing.set(e.from_task_id, []);
+      outgoing.get(e.from_task_id).push(e);
+    });
+
+    // Only labeled edges from MAIN nodes create branches
+    const labeledFromMain = edgesToUse.filter(e => branchInfoCache.main.has(e.from_task_id) && (e.label || '').trim());
+
+    labeledFromMain.forEach(e => {
+      const origin = taskById.get(e.from_task_id);
+      if (!origin) return;
+      const label = (e.label || '').trim();
+      const groupKey = makeGroupKey(e.from_task_id, label);
+
+      const taskIds = new Set();
+      const q = [e.to_task_id];
+      const seen = new Set();
+
+      while (q.length) {
+        const cur = q.shift();
+        if (!cur || seen.has(cur)) continue;
+        seen.add(cur);
+        if (branchInfoCache.main.has(cur)) continue;
+        taskIds.add(cur);
+        (outgoing.get(cur) || []).forEach(oe => {
+          if (!seen.has(oe.to_task_id)) q.push(oe.to_task_id);
+        });
+      }
+
+      if (taskIds.size === 0) taskIds.add(e.to_task_id);
+
+      branchGroups.set(groupKey, {
+        originTaskId: e.from_task_id,
+        originTaskNumber: origin.task_number,
+        label,
+        taskIds
+      });
+
+      if (!branchByOrigin.has(e.from_task_id)) branchByOrigin.set(e.from_task_id, []);
+      const arr = branchByOrigin.get(e.from_task_id);
+      if (!arr.includes(groupKey)) arr.push(groupKey);
+
+      // Sequential numbering per-branch: B<originTaskNumber>-<seq>
+      const ordered = [...taskIds].sort((a,b) => {
+        const ta = taskById.get(a);
+        const tb = taskById.get(b);
+        return (ta?.task_number ?? 999999) - (tb?.task_number ?? 999999);
+      });
+      ordered.forEach((tid, idx) => {
+        branchTaskMeta.set(tid, {
+          groupKey,
+          originTaskNumber: origin.task_number,
+          label,
+          seq: idx + 1
+        });
+      });
+    });
+  }
+
+  function toggleBranchGroup(groupKey) {
+    if (collapsedBranchGroups.has(groupKey)) collapsedBranchGroups.delete(groupKey);
+    else collapsedBranchGroups.add(groupKey);
+    renderTasks();
+    updateProgressBar();
+    updateTimingHealth();
+  }
+
+  function isTaskHiddenByBranchCollapse(taskId) {
+    const meta = branchTaskMeta.get(taskId);
+    if (!meta) return false;
+    return collapsedBranchGroups.has(meta.groupKey);
+  }
+
+  function getTaskDisplayNumber(task) {
+    const meta = branchTaskMeta.get(task.id);
+    if (!meta) return String(task.task_number);
+    return `B${meta.originTaskNumber}-${meta.seq}`;
+  }
+
+  function getBranchBadgeHtml(taskId) {
+    const meta = branchTaskMeta.get(taskId);
+    if (!meta) return '';
+    return `<span class="pill pill-branch">Branch: ${escapeHtml(meta.label)}</span>`;
+  }
+
+  function renderBranchTogglesForOrigin(originTaskId) {
+    const groups = branchByOrigin.get(originTaskId) || [];
+    if (!groups.length) return '';
+    return groups.map(gk => {
+      const g = branchGroups.get(gk);
+      const isCollapsed = collapsedBranchGroups.has(gk);
+      const label = g?.label || 'Branch';
+      const txt = (isCollapsed ? 'Show' : 'Hide') + ` Branch: ${label}`;
+      return `<button class="mini light" onclick="toggleBranchGroup('${escapeHtml(gk).replaceAll('\'','\\\'')}')">${escapeHtml(txt)}</button>`;
+    }).join('');
+  }
+
+  function renderBranchActivateButton(taskId){
+    const meta = branchTaskMeta.get(taskId);
+    if (!meta) return '';
+    // Activation button only appears on the FIRST task of a branch line
+    if (meta.seq !== 1) return '';
+
+    const gk = meta.groupKey;
+    const isActive = branchActiveGroups.has(gk);
+    if (isActive) {
+      return `<span class="pill pill-branch" style="opacity:.9;">Active</span>`;
+    }
+
+    // Only show if the branch line exists (it does) and isn't active yet
+    const safeGk = escapeHtml(gk).replaceAll("'","\'");
+    return `<button class="mini" style="background:#111827;color:#fff;border-color:#111827;" onclick="activateBranchLine('${safeGk}')">Activate Branch Task Line</button>`;
+  }
+
+
+
+  // ===== Helpers =====
+  function setWarning(msg) {
+    const el = document.getElementById('setupWarning');
+    el.style.display = 'block';
+    el.textContent = msg;
+  }
+
+  function clearWarning() {
+    const el = document.getElementById('setupWarning');
+    el.style.display = 'none';
+    el.textContent = '';
+  }
+
+  function setMemWarn(msg) {
+    const el = document.getElementById('memWarn');
+    el.style.display = 'block';
+    el.textContent = msg;
+  }
+
+  function clearMemWarn() {
+    const el = document.getElementById('memWarn');
+    el.style.display = 'none';
+    el.textContent = '';
+  }
+
+  function fmtDT(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    return d.toLocaleString(undefined, {
+      year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit'
+    });
+  }
+
+  function toLocalInputValue(iso) {
+    if (!iso) return '';
+    const d = new Date(iso);
+    const pad = n => String(n).padStart(2,'0');
+    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  }
+
+  function minutesBetween(aIso, bIso) {
+    const a = new Date(aIso).getTime();
+    const b = new Date(bIso).getTime();
+    return Math.round((a - b) / 60000);
+  }
+
+  function variancePill(mins) {
+    if (mins === null || mins === undefined) return '';
+    if (mins === 0) return `<span class="pill pill-green">On time</span>`;
+    if (mins < 0) return `<span class="pill pill-green">${Math.abs(mins)}m early</span>`;
+    if (mins <= 10) return `<span class="pill pill-amber">${mins}m late</span>`;
+    return `<span class="pill pill-red">${mins}m late</span>`;
+  }
+
+  function duePill(deltaMins) {
+    // deltaMins = now - predicted (positive means overdue)
+    if (deltaMins === null || deltaMins === undefined) return '';
+    if (deltaMins <= -1) return `<span class="pill pill-green">Due in ${Math.abs(deltaMins)}m</span>`;
+    if (deltaMins === 0) return `<span class="pill pill-amber">Due now</span>`;
+    if (deltaMins <= 10) return `<span class="pill pill-amber">${deltaMins}m overdue</span>`;
+    return `<span class="pill pill-red">${deltaMins}m overdue</span>`;
+  }
+
+  function ragClassForTask(t) {
+    // Completed: based on variance
+    if (t.completed_at && t.predicted_time) {
+      const v = minutesBetween(t.completed_at, t.predicted_time);
+      if (v <= 0) return 'rag-green';
+      if (v <= 10) return 'rag-amber';
+      return 'rag-red';
+    }
+    // In progress: based on now vs predicted
+    if (!t.completed_at && t.predicted_time) {
+      const now = new Date().toISOString();
+      const delta = minutesBetween(now, t.predicted_time); // positive overdue
+      if (delta <= 0) return 'rag-green';
+      if (delta <= 10) return 'rag-amber';
+      return 'rag-red';
+    }
+    return '';
+  }
+
+  function escapeHtml(str) {
+    return String(str)
+      .replaceAll('&', '&amp;')
+      .replaceAll('<', '&lt;')
+      .replaceAll('>', '&gt;')
+      .replaceAll('"', '&quot;')
+      .replaceAll("'", '&#39;');
+  }
+
+
+  function applyFlowZoom() {
+    const svg = document.getElementById('flowSvg');
+    const label = document.getElementById('zoomLabel');
+    if (!svg) return;
+    const baseW = 1200;
+    const baseH = 520;
+    const w = Math.round(baseW * flowZoom);
+    const h = Math.round(baseH * flowZoom);
+    svg.style.width = w + 'px';
+    svg.style.height = h + 'px';
+    if (label) label.textContent = Math.round(flowZoom * 100) + '%';
+  }
+
+  function flowZoomIn(){ flowZoom = Math.min(2.5, Math.round((flowZoom + 0.1) * 10) / 10); applyFlowZoom(); }
+  function flowZoomOut(){ flowZoom = Math.max(0.5, Math.round((flowZoom - 0.1) * 10) / 10); applyFlowZoom(); }
+  function flowZoomReset(){ flowZoom = 1; applyFlowZoom(); }
+
+  function computeBranchInfo(tasks, edgesToUse) {
+    const edges = edgesToUse || [];
+
+    const incomingLabeled = new Set(edges.filter(e => (e.label || '').trim()).map(e => e.to_task_id));
+
+    const byId = { t: new Map(), outgoing: new Map(), incoming: new Map() };
+    for (const t of tasks) {
+      byId.t.set(t.id, t);
+      byId.outgoing.set(t.id, []);
+      byId.incoming.set(t.id, []);
+    }
+    for (const e of edges) {
+      if (byId.outgoing.has(e.from_task_id)) byId.outgoing.get(e.from_task_id).push(e);
+      if (byId.incoming.has(e.to_task_id)) byId.incoming.get(e.to_task_id).push(e);
+    }
+
+    // Root = lowest task number
+    const root = tasks.slice().sort((a,b)=>a.task_number-b.task_number)[0];
+    const main = new Set();
+
+    // Walk main path preferring unlabeled edges; if none, fall back to sequential task_number
+    const sorted = tasks.slice().sort((a,b)=>a.task_number-b.task_number);
+    const idxById = new Map(sorted.map((t,i)=>[t.id,i]));
+
+    let cur = root;
+    while (cur && !main.has(cur.id)) {
+      main.add(cur.id);
+      const outs = (byId.outgoing.get(cur.id) || []);
+      const unlabeled = outs.filter(e => !(e.label || '').trim());
+      if (unlabeled.length) {
+        unlabeled.sort((e1,e2) => {
+          const t1 = byId.t.get(e1.to_task_id);
+          const t2 = byId.t.get(e2.to_task_id);
+          return (t1?.task_number ?? 999999) - (t2?.task_number ?? 999999);
+        });
+        cur = byId.t.get(unlabeled[0].to_task_id);
+        continue;
+      }
+
+      // sequential fallback (skip tasks that are clearly branch tasks)
+      const i = idxById.get(cur.id);
+      if (i === undefined) break;
+      let j = i + 1;
+      while (j < sorted.length && incomingLabeled.has(sorted[j].id)) j++;
+      const next = sorted[j];
+      if (!next) break;
+      cur = next;
+    }
+
+    return { main };
+  }
+
+  function setAddTaskEnabled(enabled) {
+    const btn = document.getElementById('btnAddTask');
+    if (!btn) return;
+    btn.disabled = !enabled;
+  }
+
+  function setView(view) {
+    currentView = view;
+    document.getElementById('openView').style.display = (view === 'open') ? '' : 'none';
+    document.getElementById('memoryView').style.display = (view === 'memory') ? '' : 'none';
+
+    document.getElementById('btnViewOpen').style.opacity = (view === 'open') ? '1' : '.7';
+    document.getElementById('btnViewMemory').style.opacity = (view === 'memory') ? '1' : '.7';
+
+    if (view === 'memory') loadMemory();
+  }
+  function updateProgressKpis() {
+    const total = tasksCache.length;
+    const done = tasksCache.filter(t => !!t.completed_at).length;
+    document.getElementById('kpiProgress').textContent = `Progress: ${done}/${total}`;
+  }
+
+  function renderPlanHeader() {
+    if (!activePlan) {
+      setAddTaskEnabled(false);
+      document.getElementById('planTitle').textContent = 'No open plans';
+      document.getElementById('planDesc').textContent = 'Create a new plan to start.';
+      document.getElementById('statusLine').textContent = '';
+      document.getElementById('kpiStatus').textContent = 'Status: -';
+      const pf=document.getElementById('progFill'); if(pf) pf.style.width='0%';
+      // progress handled by progress bar
+      return;
+    }
+    setAddTaskEnabled(true);
+    document.getElementById('planTitle').textContent = activePlan.title;
+    document.getElementById('planDesc').textContent = activePlan.description || '';
+    document.getElementById('statusLine').textContent = '';
+    document.getElementById('kpiStatus').textContent = `Status: ${activePlan.status || 'open'}`;
+  }
+
+  // ===== Data loading =====
+  async function refreshAll() {
+    clearWarning();
+    await loadPlans();
+    if (activePlan) {
+      await loadEverythingForActivePlan();
+      await loadPlanSettings();
+      updateTimingHealth();
+    }
+  }
+
+  async function loadPlans() {
+    if (SUPABASE_URL.includes('YOUR_') || SUPABASE_ANON_KEY.includes('YOUR_')) {
+      setWarning('Supabase not configured yet. Replace SUPABASE_URL and SUPABASE_ANON_KEY.');
+      document.getElementById('tabs').innerHTML = '';
+      activePlan = null;
+      renderPlanHeader();
+      document.getElementById('taskList').innerHTML = '';
+      drawFlow();
+      return;
+    }
+
+    const { data, error } = await supabaseClient
+      .from('plans')
+      .select('*')
+      .eq('status','open')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      setWarning(`Supabase error loading plans: ${error.message}`);
+      return;
+    }
+
+    const tabs = document.getElementById('tabs');
+    tabs.innerHTML = '';
+
+    if (!data || data.length === 0) {
+      activePlan = null;
+      renderPlanHeader();
+      document.getElementById('taskList').innerHTML = '';
+      drawFlow();
+      return;
+    }
+
+    // Keep activePlan if still exists
+    if (!activePlan || !data.some(p => p.id === activePlan.id)) {
+      activePlan = data[0];
+    } else {
+      activePlan = data.find(p => p.id === activePlan.id);
+    }
+
+    data.forEach(p => {
+      const t = document.createElement('div');
+      t.className = 'tab' + (activePlan && p.id === activePlan.id ? ' active' : '');
+      t.innerHTML = `${escapeHtml(p.title)} <span class="badge">open</span>`;
+      t.onclick = async () => {
+        activePlan = p;
+        await loadEverythingForActivePlan();
+        repaintTabs();
+      };
+      tabs.appendChild(t);
+    });
+
+    repaintTabs();
+    renderPlanHeader();
+  }
+
+  function repaintTabs() {
+    const tabs = document.getElementById('tabs');
+    [...tabs.children].forEach(ch => {
+      const isActive = activePlan && ch.textContent.trim().startsWith(activePlan.title);
+      ch.classList.toggle('active', isActive);
+    });
+  }
+
+  async function loadEverythingForActivePlan() {
+    renderPlanHeader();
+    // Load tasks + edges first so we can determine main vs branches before rendering cards
+    await loadTasks();
+    await loadEdges();
+    recomputeBranchCache();
+    await loadBranchStates();
+    await loadSubtasks();
+    renderTasks();
+    updateProgressBar();
+    updateTimingHealth();
+
+  }
+
+  async function loadTasks() {
+    if (!activePlan) return;
+
+    const { data, error } = await supabaseClient
+      .from('tasks')
+      .select('*')
+      .eq('plan_id', activePlan.id)
+      .order('task_number', { ascending: true });
+
+    if (error) {
+      setWarning(`Supabase error loading tasks: ${error.message}`);
+      tasksCache = [];
+      return;
+    }
+
+    tasksCache = data || [];
+  }
+
+  async function loadSubtasks() {
+    subtasksCache = {};
+    if (!activePlan) return;
+
+    // Pull all subtasks for tasks in this plan
+    const taskIds = tasksCache.map(t => t.id);
+    if (taskIds.length === 0) return;
+
+    const { data, error } = await supabaseClient
+      .from('subtasks')
+      .select('*')
+      .in('task_id', taskIds)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      // Table may not exist yet; don't hard-fail.
+      console.warn('Subtasks load warning:', error.message);
+      return;
+    }
+
+    (data || []).forEach(s => {
+      if (!subtasksCache[s.task_id]) subtasksCache[s.task_id] = [];
+      subtasksCache[s.task_id].push(s);
+    });
+  }
+
+  async function loadEdges() {
+    edgesCache = [];
+    if (!activePlan) return;
+
+    const { data, error } = await supabaseClient
+      .from('edges')
+      .select('*')
+      .eq('plan_id', activePlan.id)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      // Table may not exist yet; don't hard-fail.
+      console.warn('Edges load warning:', error.message);
+      return;
+    }
+
+    edgesCache = data || [];
+  }
+
+  // ===== Tasks + subtasks UI =====
+  function renderTasks() {
+    // keep KPIs fresh
+
+    const list = document.getElementById('taskList');
+    list.innerHTML = '';
+
+    if (!activePlan) {
+      list.innerHTML = '';
+      setAddTaskEnabled(false);
+      return;
+    }
+
+    setAddTaskEnabled(true);
+
+    tasksCache.forEach(t => {
+      if (isTaskHiddenByBranchCollapse(t.id)) return;
+      if (isTaskHiddenByBranchCollapse(t.id)) return;
+      const d = document.createElement('div');
+      d.className = `task ${ragClassForTask(t)}`;
+      d.id = `task-${t.id}`;
+
+      const hasPred = !!t.predicted_time;
+      const isDone = !!t.completed_at;
+      const varianceMins = (isDone && hasPred) ? minutesBetween(t.completed_at, t.predicted_time) : null;
+
+      const dueDelta = (!isDone && hasPred)
+        ? minutesBetween(new Date().toISOString(), t.predicted_time)
+        : null;
+
+      const timingText = isDone
+        ? `Completed: ${fmtDT(t.completed_at)}`
+        : (hasPred ? `Predicted: ${fmtDT(t.predicted_time)}` : 'Predicted: (not set)');
+
+      const rightTop = `<div class="muted" style="font-size:.85rem; margin-bottom:.25rem;">Predicted completion</div>`;
+
+      const subList = (subtasksCache[t.id] || []);
+      const subHtml = `
+        <div class="subtasks">
+          <div class="controls" style="justify-content:space-between; align-items:center;">
+            <div style="font-weight:900;">Subtasks</div>
+            <button class="mini light" onclick="addSubtaskPrompt('${t.id}')">+ Add subtask</button>
+          </div>
+          ${subList.length ? subList.map(s => {
+            const sid = `${t.task_number}${escapeHtml(s.sub_letter)}`;
+            const done = !!s.completed_at;
+            return `
+              <div class="subrow">
+                <div class="subid">${sid}</div>
+                <div>
+                  <div style="font-weight:800;">${escapeHtml(s.title)}</div>
+                  <div class="muted" style="font-size:.85rem;">${done ? `Completed: ${fmtDT(s.completed_at)}` : 'Open'}</div>
+                </div>
+                <button class="subbtn ${done ? 'done' : ''}" ${done ? 'disabled' : ''} onclick="completeSubtask('${s.id}')">${done ? '✓ Done' : 'Complete'}</button>
+              </div>
+            `;
+          }).join('') : `<div class="muted">No subtasks yet.</div>`}
+        </div>
+      `;
+
+      d.innerHTML = `
+        <div class="taskNum">${getTaskDisplayNumber(t)}</div>
+        <div>
+          <div class="taskTitle">${escapeHtml(t.title)} ${getBranchBadgeHtml(t.id)} ${t.is_na ? `<span class="pill pill-na">N/A</span>` : ``}</div>
+          <div class="taskMeta muted">${timingText}
+            ${hasPred && isDone ? variancePill(varianceMins) : ''}
+            ${hasPred && !isDone ? duePill(dueDelta) : ''}
+          </div>
+
+          <div class="controls" style="margin-top:.5rem;">
+            <button class="mini light" onclick="editTaskTitle('${t.id}')">Edit</button>
+            <button class="mini light" onclick="addNextFromTask('${t.id}')">Add next</button>
+            <button class="mini light" onclick="addBranchFromTask('${t.id}')">Add branch</button>
+            ${renderBranchTogglesForOrigin(t.id)} ${renderBranchActivateButton(t.id)}
+          </div>
+
+          ${subHtml}
+        </div>
+        <div>
+          ${rightTop}
+          <input type="datetime-local" ${(isDone||t.is_na) ? 'disabled' : ''} value="${toLocalInputValue(t.predicted_time)}" onchange="setPredictedTime('${t.id}', this.value)" />
+          <div style="margin-top:.5rem;">
+            <button class="complete ${isDone ? 'done' : ''}" ${(isDone||t.is_na) ? 'disabled' : ''} onclick="completeTask('${t.id}')">${isDone ? '✓ Done' : 'Complete'}</button>
+          </div>
+        </div>
+      `;
+
+      list.appendChild(d);
+    });
+
+
+  }
+
+  async function setPredictedTime(taskId, localValue) {
+    if (!activePlan) return;
+    const iso = localValue ? new Date(localValue).toISOString() : null;
+
+    const { error } = await supabaseClient
+      .from('tasks')
+      .update({ predicted_time: iso })
+      .eq('id', taskId);
+
+    if (error) {
+      setWarning(`Failed to update predicted time: ${error.message}`);
+      return;
+    }
+
+    await loadTasks();
+    renderTasks();
+    updateProgressBar();
+    updateTimingHealth();
+  }
+
+  async function editTaskTitle(taskId) {
+    const t = tasksCache.find(x => x.id === taskId);
+    if (!t) return;
+    const title = prompt('Edit task title', t.title);
+    if (!title) return;
+
+    const { error } = await supabaseClient
+      .from('tasks')
+      .update({ title: title.trim() })
+      .eq('id', taskId);
+
+    if (error) { setWarning(`Failed to edit task: ${error.message}`); return; }
+
+    await loadTasks();
+    await loadSubtasks();
+    renderTasks();
+    updateProgressBar();
+    updateTimingHealth();
+  }
+
+  async function addTask() {
+    if (!activePlan) {
+      setWarning('No active plan selected. Create/open a plan first.');
+      return;
+    }
+
+    const title = prompt('Task title/description');
+    if (!title) return;
+
+    const mainNums = tasksCache.filter(t => branchInfoCache.main.has(t.id)).map(t => Number(t.task_number)||0);
+    const nextNum = mainNums.length ? Math.max(...mainNums) + 1 : 1;
+
+    const { error } = await supabaseClient.from('tasks').insert({
+      plan_id: activePlan.id,
+      task_number: nextNum,
+      title: title.trim()
+    });
+
+    if (error) { setWarning(`Failed to add task: ${error.message}`); return; }
+
+    await loadEverythingForActivePlan();
+  }
+
+  async function completeTask(taskId) {
+    const t = tasksCache.find(x => x.id === taskId);
+    if (t?.is_na) { setWarning('That task is marked N/A (branch activated).'); return; }
+    if (!activePlan) return;
+
+    const { error } = await supabaseClient
+      .from('tasks')
+      .update({ completed_at: new Date().toISOString() })
+      .eq('id', taskId);
+
+    if (error) { setWarning(`Failed to complete task: ${error.message}`); return; }
+
+    await loadTasks();
+    await loadSubtasks();
+    renderTasks();
+    updateProgressBar();
+    updateTimingHealth();
+  }
+
+  function nextLetter(existingLetters) {
+    const alphabet = 'abcdefghijklmnopqrstuvwxyz';
+    for (const ch of alphabet) {
+      if (!existingLetters.has(ch)) return ch;
+    }
+    return null;
+  }
+
+  async function addSubtaskPrompt(taskId) {
+    const title = prompt('Subtask title');
+    if (!title) return;
+
+    const existing = new Set((subtasksCache[taskId] || []).map(s => String(s.sub_letter).toLowerCase()));
+    const letter = nextLetter(existing);
+    if (!letter) { setWarning('Too many subtasks. You have successfully outgrown the alphabet.'); return; }
+
+    const { error } = await supabaseClient
+      .from('subtasks')
+      .insert({ task_id: taskId, sub_letter: letter, title: title.trim() });
+
+    if (error) { setWarning(`Failed to add subtask: ${error.message}`); return; }
+
+    await loadSubtasks();
+    renderTasks();
+    updateProgressBar();
+    updateTimingHealth();
+  }
+
+  async function completeSubtask(subtaskId) {
+    const { error } = await supabaseClient
+      .from('subtasks')
+      .update({ completed_at: new Date().toISOString() })
+      .eq('id', subtaskId);
+
+    if (error) { setWarning(`Failed to complete subtask: ${error.message}`); return; }
+
+    await loadSubtasks();
+    renderTasks();
+    updateProgressBar();
+    updateTimingHealth();
+  }
+
+  // ===== Plan lifecycle =====
+  async function createPlanPrompt() {
+    clearWarning();
+
+    const title = prompt('New plan title (incident / fault name)');
+    if (!title) return;
+
+    const description = prompt('Brief description (optional)') || '';
+
+    const { data, error } = await supabaseClient
+      .from('plans')
+      .insert({ title: title.trim(), description: description.trim(), status: 'open' })
+      .select('*')
+      .single();
+
+    if (error) { setWarning(`Failed to create plan: ${error.message}`); return; }
+
+    activePlan = data;
+    await refreshAll();
+    await loadEverythingForActivePlan();
+  }
+
+  async function closePlan() {
+    if (!activePlan) { setWarning('No active plan selected.'); return; }
+    if (!confirm('Close this incident and lock the plan? This prevents further edits.')) return;
+
+    const { error } = await supabaseClient
+      .from('plans')
+      .update({ status:'closed', closed_at: new Date().toISOString() })
+      .eq('id', activePlan.id);
+
+    if (error) { setWarning(`Failed to close plan: ${error.message}`); return; }
+
+    activePlan = null;
+    tasksCache = [];
+    subtasksCache = {};
+    edgesCache = [];
+    await loadPlans();
+    renderPlanHeader();
+    renderTasks();
+    updateProgressBar();
+    updateTimingHealth();
+  }
+
+  // ===== Stage 2: Flowchart =====
+  function ensurePositions() {
+    // If tasks have no positions (all 0), place them in a tidy column.
+    const allZero = tasksCache.length && tasksCache.every(t => (t.position_x === 0 && t.position_y === 0));
+    if (!allZero) return;
+
+    const startX = 120;
+    const startY = 70;
+    const stepY = 90;
+
+    tasksCache.forEach((t, idx) => {
+      t.position_x = startX;
+      t.position_y = startY + idx * stepY;
+    });
+  }
+
+  async function persistPosition(taskId, x, y) {
+    // Update in DB, but don't wreck the UI if it fails.
+    try {
+      await supabaseClient.from('tasks').update({ position_x: Math.round(x), position_y: Math.round(y) }).eq('id', taskId);
+    } catch (e) {
+      console.warn('Position update failed', e);
+    }
+  }
+
+  function drawFlow() {
+    return; // Flow diagram removed (too much drama).
+
+    if (!flowVisible) return;
+    const card = document.getElementById('flowCard');
+    if (card && card.style.display === 'none') return;
+    const svg = document.getElementById('flowSvg');
+    if (!svg) return;
+
+    svg.innerHTML = '';
+
+    if (!activePlan) return;
+
+    ensurePositions();
+
+    const edgesToDraw = buildEffectiveEdges();
+
+    // Branch info (main path vs branches)
+    recomputeBranchCache();
+
+    // Build map
+    const map = new Map(tasksCache.map(t => [t.id, t]));
+
+    // Arrow marker
+    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+    defs.innerHTML = `
+      <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto" markerUnits="strokeWidth">
+        <path d="M0,0 L9,3 L0,6 Z" fill="#111827"></path>
+      </marker>
+    `;
+    svg.appendChild(defs);
+
+    // Draw edges
+    edgesToDraw.forEach(e => {
+      if (isTaskHiddenByBranchCollapse(e.to_task_id)) return;
+      if (isTaskHiddenByBranchCollapse(e.from_task_id)) return;
+      const a = map.get(e.from_task_id);
+      const b = map.get(e.to_task_id);
+      if (!a || !b) return;
+
+      // Compute anchors based on relative positions (less rigid than right-to-left only)
+      const fw = 240, fh = 52;
+      const fcx = (a.position_x || 0) + fw/2;
+      const fcy = (a.position_y || 0) + fh/2;
+      const tcx = (b.position_x || 0) + fw/2;
+      const tcy = (b.position_y || 0) + fh/2;
+      const dx = tcx - fcx;
+      const dy = tcy - fcy;
+
+      let ax, ay, bx, by;
+      if (Math.abs(dx) >= Math.abs(dy)) {
+        // Horizontal
+        if (dx >= 0) {
+          ax = (a.position_x || 0) + fw;
+          ay = (a.position_y || 0) + fh/2;
+          bx = (b.position_x || 0);
+          by = (b.position_y || 0) + fh/2;
+        } else {
+          ax = (a.position_x || 0);
+          ay = (a.position_y || 0) + fh/2;
+          bx = (b.position_x || 0) + fw;
+          by = (b.position_y || 0) + fh/2;
+        }
+        const midX = (ax + bx) / 2;
+        var d = `M ${ax} ${ay} C ${midX} ${ay}, ${midX} ${by}, ${bx} ${by}`;
+      } else {
+        // Vertical
+        if (dy >= 0) {
+          ax = (a.position_x || 0) + fw/2;
+          ay = (a.position_y || 0) + fh;
+          bx = (b.position_x || 0) + fw/2;
+          by = (b.position_y || 0);
+        } else {
+          ax = (a.position_x || 0) + fw/2;
+          ay = (a.position_y || 0);
+          bx = (b.position_x || 0) + fw/2;
+          by = (b.position_y || 0) + fh;
+        }
+        const midY = (ay + by) / 2;
+        var d = `M ${ax} ${ay} C ${ax} ${midY}, ${bx} ${midY}, ${bx} ${by}`;
+      }
+      path.setAttribute('d', d);
+      path.setAttribute('fill', 'none');
+      const lbl = (e.label || '').trim();
+      path.setAttribute('stroke', lbl ? '#2563eb' : '#111827');
+      if (lbl) path.setAttribute('stroke-dasharray', '6 4');
+      path.setAttribute('stroke-width', '2');
+      path.setAttribute('marker-end', 'url(#arrow)');
+      svg.appendChild(path);
+
+      if (e.label) {
+        const tx = midX;
+        const ty = (ay + by) / 2 - 6;
+        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        label.setAttribute('x', tx);
+        label.setAttribute('y', ty);
+        label.setAttribute('text-anchor', 'middle');
+        label.setAttribute('font-size', '12');
+        label.setAttribute('font-weight', '800');
+        label.setAttribute('fill', '#374151');
+        label.textContent = e.label;
+        svg.appendChild(label);
+      }
+    });
+
+    // Draw nodes
+    tasksCache.forEach(t => {
+      if (isTaskHiddenByBranchCollapse(t.id)) return;
+      if (isTaskHiddenByBranchCollapse(t.id)) return;
+      const x = t.position_x || 120;
+      const y = t.position_y || 70;
+
+      const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+      g.setAttribute('data-id', t.id);
+      g.setAttribute('transform', `translate(${x}, ${y})`);
+      g.style.cursor = 'grab';
+
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+      rect.setAttribute('width', '240');
+      rect.setAttribute('height', '52');
+      rect.setAttribute('rx', '14');
+      rect.setAttribute('fill', '#ffffff');
+      rect.setAttribute('stroke', '#e5e7eb');
+      rect.setAttribute('stroke-width', '2');
+
+      // RAG tint
+      const rag = ragClassForTask(t);
+      if (rag === 'rag-green') rect.setAttribute('stroke', '#22c55e');
+      if (rag === 'rag-amber') rect.setAttribute('stroke', '#f59e0b');
+      if (rag === 'rag-red') rect.setAttribute('stroke', '#ef4444');
+
+      // Branch tint (so you can tell what's mainline without a séance)
+      if (!branchInfoCache.main.has(t.id)) {
+        rect.setAttribute('fill', '#eff6ff');
+        rect.setAttribute('stroke', '#2563eb');
+      }
+
+      const text1 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      text1.setAttribute('x', '14');
+      text1.setAttribute('y', '22');
+      text1.setAttribute('font-size', '13');
+      text1.setAttribute('font-weight', '900');
+      text1.setAttribute('fill', '#111827');
+      text1.textContent = `${getTaskDisplayNumber(t)}. ${truncate(t.title, 28)}`;
+
+      const text2 = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      text2.setAttribute('x', '14');
+      text2.setAttribute('y', '40');
+      text2.setAttribute('font-size', '11');
+      text2.setAttribute('font-weight', '800');
+      text2.setAttribute('fill', '#6b7280');
+      const meta = branchTaskMeta.get(t.id);
+      const branchTag = meta ? ` • Branch: ${meta.label}` : '';
+      text2.textContent = t.completed_at ? `Done ${fmtDT(t.completed_at)}${branchTag}` : (t.predicted_time ? `Pred ${fmtDT(t.predicted_time)}${branchTag}` : `No prediction${branchTag}`);
+
+      g.appendChild(rect);
+      g.appendChild(text1);
+      g.appendChild(text2);
+      svg.appendChild(g);
+
+      // click -> scroll
+      g.addEventListener('dblclick', () => {
+        const el = document.getElementById(`task-${t.id}`);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      });
+
+      // drag
+      enableDrag(g, t);
+    });
+  }
+
+  function truncate(s, n) {
+    s = String(s || '');
+    return s.length > n ? s.slice(0, n - 1) + '…' : s;
+  }
+
+  function enableDrag(g, task) {
+    let dragging = false;
+    let start = { x:0, y:0 };
+    let origin = { x:0, y:0 };
+
+    const svg = document.getElementById('flowSvg');
+
+    g.addEventListener('mousedown', (ev) => {
+      dragging = true;
+      g.style.cursor = 'grabbing';
+      start = { x: ev.clientX, y: ev.clientY };
+      origin = { x: task.position_x || 0, y: task.position_y || 0 };
+    });
+
+    window.addEventListener('mousemove', (ev) => {
+      if (!dragging) return;
+      const dx = ev.clientX - start.x;
+      const dy = ev.clientY - start.y;
+      task.position_x = origin.x + dx;
+      task.position_y = origin.y + dy;
+      g.setAttribute('transform', `translate(${task.position_x}, ${task.position_y})`);
+      // redraw edges live
+      drawFlow();
+    }, { passive: true });
+
+    window.addEventListener('mouseup', async () => {
+      if (!dragging) return;
+      dragging = false;
+      g.style.cursor = 'grab';
+      await persistPosition(task.id, task.position_x, task.position_y);
+    });
+  }
+
+  async function autoLayout() {
+    if (!activePlan) return;
+
+    // Smarter layout: mainline across the top, branches dropping below their origin.
+    recomputeBranchCache();
+
+    const mainIds = branchInfoCache?.main ? Array.from(branchInfoCache.main) : [];
+    const taskById = new Map(tasksCache.map(t => [t.id, t]));
+    const mainTasks = mainIds.map(id => taskById.get(id)).filter(Boolean).sort((a,b)=>a.task_number-b.task_number);
+
+    const startX = 80;
+    const startY = 80;
+    const stepX = 300;
+    const branchGapY = 140;
+    const branchStepY = 90;
+
+    const pos = new Map();
+
+    // Place mainline
+    mainTasks.forEach((t, i) => {
+      pos.set(t.id, { x: startX + i * stepX, y: startY });
+    });
+
+    // Place branches
+    // branchGroups is keyed by origin|label
+    const originBranchCounts = new Map();
+    for (const [gk, g] of branchGroups.entries()) {
+      const originPos = pos.get(g.originTaskId) || { x: startX, y: startY };
+      const offsetIdx = originBranchCounts.get(g.originTaskId) || 0;
+      originBranchCounts.set(g.originTaskId, offsetIdx + 1);
+
+      const ordered = Array.from(g.taskIds).map(id => taskById.get(id)).filter(Boolean).sort((a,b)=>a.task_number-b.task_number);
+      ordered.forEach((t, j) => {
+        pos.set(t.id, { x: originPos.x + 220, y: originPos.y + branchGapY + offsetIdx*branchGapY + j*branchStepY });
+      });
+    }
+
+    // Place any remaining tasks (neither main nor branch) below everything
+    const placed = new Set(pos.keys());
+    let spillY = startY + 3*branchGapY + 200;
+    let spillX = startX;
+    tasksCache.slice().sort((a,b)=>a.task_number-b.task_number).forEach(t => {
+      if (placed.has(t.id)) return;
+      pos.set(t.id, { x: spillX, y: spillY });
+      spillX += stepX;
+      if (spillX > startX + stepX*3) { spillX = startX; spillY += branchStepY; }
+    });
+
+    // Persist
+    for (const t of tasksCache) {
+      const p = pos.get(t.id);
+      if (!p) continue;
+      t.position_x = Math.round(p.x);
+      t.position_y = Math.round(p.y);
+      await persistPosition(t.id, t.position_x, t.position_y);
+    }
+
+    // Reset viewport to top-left so the layout doesn't vanish off-screen
+    const vp = document.getElementById('flowViewport');
+    if (vp) { vp.scrollLeft = 0; vp.scrollTop = 0; }
+
+    drawFlow();
+  }
+
+  async function addEdgePrompt() {
+    if (!activePlan) return;
+    if (tasksCache.length < 2) { setWarning('Need at least two tasks to draw an arrow.'); return; }
+
+    const fromNum = prompt(`From task number? Available: ${tasksCache.map(t=>t.task_number).join(', ')}`);
+    if (!fromNum) return;
+    const toNum = prompt('To task number?');
+    if (!toNum) return;
+
+    const fromTask = tasksCache.find(t => String(t.task_number) === String(fromNum));
+    const toTask = tasksCache.find(t => String(t.task_number) === String(toNum));
+    if (!fromTask || !toTask) { setWarning('Invalid task numbers.'); return; }
+
+    const label = prompt('Branch label (optional, e.g. "if fail", "fallback")') || '';
+
+    const { error } = await supabaseClient
+      .from('edges')
+      .insert({ plan_id: activePlan.id, from_task_id: fromTask.id, to_task_id: toTask.id, label: label.trim() });
+
+    if (error) { setWarning(`Failed to add arrow: ${error.message}`); return; }
+
+    await loadEdges();
+    drawFlow();
+  }
+
+  async function addNextFromTask(taskId) {
+    // If this task is part of a branch, Add next should stay on that branch.
+    const meta = branchTaskMeta.get(taskId);
+    await addLinkedTask(taskId, meta ? (meta.label || '').trim() : '');
+  }
+
+  async function addBranchFromTask(taskId) {
+    const label = prompt('Branch label (e.g. "if fail", "fallback")') || '';
+    await addLinkedTask(taskId, label.trim());
+  }
+
+  async function addLinkedTask(fromTaskId, edgeLabel) {
+    if (!activePlan) return;
+    const fromTask = tasksCache.find(t => t.id === fromTaskId);
+    if (!fromTask) return;
+
+    const title = prompt(edgeLabel ? `New task title for branch (${edgeLabel})` : 'New task title');
+    if (!title) return;
+
+    const isBranchCreate = !!(edgeLabel && String(edgeLabel).trim());
+    const mainNums = tasksCache.filter(t => branchInfoCache.main.has(t.id)).map(t => Number(t.task_number)||0);
+    const nextMain = mainNums.length ? Math.max(...mainNums) + 1 : 1;
+    const allNums = tasksCache.map(t => Number(t.task_number)||0);
+    const nextSort = allNums.length ? Math.max(...allNums) + 1 : 1;
+    const nextNum = isBranchCreate ? (9000 + nextSort) : nextMain;
+
+    // Place new node near the parent (slightly to the right and down)
+    const px = (fromTask.position_x || 120) + 320;
+    const py = (fromTask.position_y || 70) + (edgeLabel ? 80 : 0);
+
+    const { data: newTask, error: tErr } = await supabaseClient
+      .from('tasks')
+      .insert({ plan_id: activePlan.id, task_number: nextNum, title: title.trim(), position_x: Math.round(px), position_y: Math.round(py) })
+      .select('*')
+      .single();
+
+    if (tErr) { setWarning(`Failed to add task: ${tErr.message}`); return; }
+
+    // Create edge
+    const { error: eErr } = await supabaseClient
+      .from('edges')
+      .insert({ plan_id: activePlan.id, from_task_id: fromTask.id, to_task_id: newTask.id, label: edgeLabel || '' });
+
+    if (eErr) {
+      setWarning(`Task created but edge failed: ${eErr.message}`);
+    }
+
+    await loadEverythingForActivePlan();
+    const el = document.getElementById(`task-${newTask.id}`);
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }
+
+  // ===== Stage 2: Memory (search + clone) =====
+  async function loadMemory() {
+    clearMemWarn();
+
+    const q = (document.getElementById('memSearch')?.value || '').trim().toLowerCase();
+
+    const { data, error } = await supabaseClient
+      .from('plans')
+      .select('*')
+      .eq('status','closed')
+      .order('closed_at', { ascending: false })
+      .limit(100);
+
+    if (error) {
+      setMemWarn(`Failed to load memory: ${error.message}`);
+      return;
+    }
+
+    const filtered = (data || []).filter(p => {
+      if (!q) return true;
+      return (p.title || '').toLowerCase().includes(q) || (p.description || '').toLowerCase().includes(q);
+    });
+
+    const list = document.getElementById('memList');
+    list.innerHTML = '';
+
+    if (!filtered.length) {
+      list.innerHTML = `<div class="muted">Nothing found. Either you’ve never closed a plan, or you’ve invented a new spelling of words.</div>`;
+      return;
+    }
+
+    filtered.forEach(p => {
+      const row = document.createElement('div');
+      row.className = 'memItem';
+      row.innerHTML = `
+        <div>
+          <div class="title">${escapeHtml(p.title)}</div>
+          <div class="meta">Closed: ${fmtDT(p.closed_at)}${p.description ? ` • ${escapeHtml(p.description)}` : ''}</div>
+        </div>
+        <div class="controls">
+          <button class="mini light" onclick="openMemoryPlan('${p.id}')">View</button>
+          <button class="mini primary" onclick="clonePlanPrompt('${p.id}')">Clone</button>
+        </div>
+      `;
+      list.appendChild(row);
+    });
+  }
+
+  async function openMemoryPlan(planId) {
+    // Load closed plan into the open view, but keep it read-only by disabling Add Task and completion.
+    const { data: plan, error } = await supabaseClient.from('plans').select('*').eq('id', planId).single();
+    if (error) { setMemWarn(`Failed to open plan: ${error.message}`); return; }
+
+    activePlan = plan;
+    await loadEverythingForActivePlan();
+    setView('open');
+
+    // disable mutations when closed
+    const isClosed = (activePlan.status === 'closed');
+    document.getElementById('btnAddTask').disabled = isClosed;
+    // completion buttons get disabled in render based on completed_at only; we’ll blanket-disable for closed plans
+    // Simple approach: warn user.
+    if (isClosed) {
+      setWarning('Viewing a CLOSED plan. Read-only mode. No edits, no “just a quick tweak”.');
+      // disable all inputs/buttons in task list
+      document.querySelectorAll('#taskList input, #taskList button').forEach(el => el.disabled = true);
+    }
+  }
+
+  async function clonePlanPrompt(sourcePlanId) {
+    const newTitle = prompt('Clone plan title', 'Cloned plan');
+    if (!newTitle) return;
+
+    const { data: srcPlan, error: pErr } = await supabaseClient.from('plans').select('*').eq('id', sourcePlanId).single();
+    if (pErr) { setMemWarn(`Failed to load source plan: ${pErr.message}`); return; }
+
+    // Create new plan
+    const { data: newPlan, error: nErr } = await supabaseClient
+      .from('plans')
+      .insert({ title: newTitle.trim(), description: srcPlan.description || '', status: 'open' })
+      .select('*')
+      .single();
+
+    if (nErr) { setMemWarn(`Failed to create cloned plan: ${nErr.message}`); return; }
+
+    // Load source tasks
+    const { data: srcTasks, error: tErr } = await supabaseClient
+      .from('tasks')
+      .select('*')
+      .eq('plan_id', sourcePlanId)
+      .order('task_number', { ascending: true });
+
+    if (tErr) { setMemWarn(`Clone created, but failed reading tasks: ${tErr.message}`); return; }
+
+    // Insert tasks (reset completion)
+    const taskMap = new Map(); // oldId -> newId
+
+    for (const st of (srcTasks || [])) {
+      const { data: nt, error } = await supabaseClient
+        .from('tasks')
+        .insert({
+          plan_id: newPlan.id,
+          task_number: st.task_number,
+          title: st.title,
+          predicted_time: st.predicted_time,
+          completed_at: null,
+          position_x: st.position_x,
+          position_y: st.position_y
+        })
+        .select('*')
+        .single();
+
+      if (error) { setMemWarn(`Clone task failed: ${error.message}`); return; }
+      taskMap.set(st.id, nt.id);
+    }
+
+    // Clone subtasks
+    const srcTaskIds = (srcTasks || []).map(t => t.id);
+    if (srcTaskIds.length) {
+      const { data: srcSubs, error: sErr } = await supabaseClient
+        .from('subtasks')
+        .select('*')
+        .in('task_id', srcTaskIds)
+        .order('created_at', { ascending: true });
+
+      if (!sErr && srcSubs?.length) {
+        for (const ss of srcSubs) {
+          const newTaskId = taskMap.get(ss.task_id);
+          if (!newTaskId) continue;
+          await supabaseClient.from('subtasks').insert({
+            task_id: newTaskId,
+            sub_letter: ss.sub_letter,
+            title: ss.title,
+            completed_at: null
+          });
+        }
+      }
+    }
+
+    // Clone edges
+    const { data: srcEdges, error: eErr } = await supabaseClient
+      .from('edges')
+      .select('*')
+      .eq('plan_id', sourcePlanId)
+      .order('created_at', { ascending: true });
+
+    if (!eErr && srcEdges?.length) {
+      for (const se of srcEdges) {
+        const from = taskMap.get(se.from_task_id);
+        const to = taskMap.get(se.to_task_id);
+        if (!from || !to) continue;
+        await supabaseClient.from('edges').insert({
+          plan_id: newPlan.id,
+          from_task_id: from,
+          to_task_id: to,
+          label: se.label || ''
+        });
+      }
+    }
+
+    // Switch to new plan
+    activePlan = newPlan;
+    setView('open');
+    await refreshAll();
+    await loadEverythingForActivePlan();
+  }
+
+  // ===== Small loop that silently judges everyone =====
+  setInterval(() => {
+    // Refresh due/overdue pills + RAG without hammering the DB
+    if (currentView === 'open' && activePlan) {
+      renderTasks();
+      // Don't waste cycles when Flow is hidden
+      const card = document.getElementById('flowCard');
+      if (card && card.style.display !== 'none') drawFlow();
+    }
+  }, 30000);
+
+  
+  function initFlowPan() {
+    const vp = document.getElementById('flowViewport');
+    if (!vp) return;
+
+    let isPanning = false;
+    let startX = 0, startY = 0, startLeft = 0, startTop = 0;
+
+    vp.addEventListener('mousedown', (e) => {
+      // Only pan when clicking the background (not a node) and not in add-arrow mode
+      if (addingArrowMode) return;
+      const target = e.target;
+      if (!target) return;
+      // If inside a node group, don't pan
+      if (target.closest && target.closest('g[data-id]')) return;
+      isPanning = true;
+      vp.style.cursor = 'grabbing';
+      startX = e.clientX;
+      startY = e.clientY;
+      startLeft = vp.scrollLeft;
+      startTop = vp.scrollTop;
+      e.preventDefault();
+    });
+
+    window.addEventListener('mousemove', (e) => {
+      if (!isPanning) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      vp.scrollLeft = startLeft - dx;
+      vp.scrollTop = startTop - dy;
+    });
+
+    window.addEventListener('mouseup', () => {
+      if (!isPanning) return;
+      isPanning = false;
+      vp.style.cursor = '';
+    });
+  }
+
+// ===== Boot =====
+  setView('open');
+  loadPlans().then(() => { if (activePlan) loadEverythingForActivePlan(); });
+</script>
+
+</body>
+</html>
