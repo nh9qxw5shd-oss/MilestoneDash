@@ -199,7 +199,7 @@
     }
 
     .complete {
-      background: var(--good);
+      background: #ef4444; /* red until completed */
       color: white;
       border: none;
       border-radius: .6rem;
@@ -213,6 +213,33 @@
 
     .complete.done {
       background: #22c55e;
+    }
+
+    /* Compact task action menu (+) */
+    .actionMenu{ position:relative; display:inline-flex; align-items:center; }
+    .plusBtn{ width:34px; padding:.28rem 0; text-align:center; font-weight:1000; }
+    .actionMenu .menu{
+      position:absolute; top:110%; left:0;
+      background:white; border:1px solid var(--line);
+      border-radius:.75rem;
+      box-shadow: 0 10px 30px rgba(0,0,0,.08);
+      padding:.35rem;
+      display:none;
+      gap:.35rem;
+      z-index: 20;
+    }
+    .actionMenu.open .menu{ display:flex; }
+
+    /* N/A tasks: collapse RHS to keep the list clean */
+    .task.na .rightCol{ display:none; }
+    .task.na{ opacity:.75; }
+
+    /* Branch cue arrow */
+    .branchCue{
+      margin-top:.35rem;
+      font-size:.85rem;
+      font-weight:900;
+      color:#2563eb;
     }
 
     .pill {
@@ -408,6 +435,12 @@
     .progFill.amber { background: var(--amber); }
     .progFill.bad { background: var(--danger); }
 
+
+  .field{display:flex;flex-direction:column;gap:.25rem;}
+  .fieldLbl{font-size:.78rem;color:var(--muted);font-weight:800;letter-spacing:.01em;}
+  .refsGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem;margin:.55rem 0 .55rem 0;}
+  @media(max-width:900px){.refsGrid{grid-template-columns:1fr;}}
+
 </style>
 </head>
 <body>
@@ -447,16 +480,43 @@
           <div class="setting">
             <label>Time float (hours)</label>
             <input id="floatHours" type="number" min="0" step="0.25" value="0" oninput="markSettingsDirty()" />
+            <div class="refsGrid">
+              <div class="field">
+                <label class="fieldLbl">FMS ref</label>
+                <input id="fmsRef" type="text" placeholder="e.g. FMS123456" oninput="markSettingsDirty()" />
+              </div>
+              <div class="field">
+                <label class="fieldLbl">CCIL ref</label>
+                <input id="ccilRef" type="text" placeholder="e.g. CCIL-0000" oninput="markSettingsDirty()" />
+              </div>
+              <div class="field">
+                <label class="fieldLbl">TDA ref</label>
+                <input id="tdaRef" type="text" placeholder="e.g. TDA-0000" oninput="markSettingsDirty()" />
+              </div>
+            </div>
             <div class="muted" id="timingHealthLine">Set a float to calculate health.</div>
-            <div id="timingSpark" class="spark"></div>
+            <div class="muted" id="timingRagLine" style="margin-top:.35rem;font-weight:900;">No timing status yet.</div>
+            <div class="muted" id="timingDetailLine" style="margin-top:.2rem;"></div>
           </div>
           <div class="setting">
             <label>Command structure</label>
             <div class="cmdGrid">
-              <input id="tpicName" type="text" placeholder="TPIC name" oninput="markSettingsDirty()" />
-              <input id="tpicPhone" type="text" placeholder="TPIC phone" oninput="markSettingsDirty()" />
-              <input id="mmicName" type="text" placeholder="MMIC name" oninput="markSettingsDirty()" />
-              <input id="mmicPhone" type="text" placeholder="MMIC phone" oninput="markSettingsDirty()" />
+              <div class="field">
+                <label class="fieldLbl">TPIC name</label>
+                <input id="tpicName" type="text" placeholder="Name" oninput="markSettingsDirty()" />
+              </div>
+              <div class="field">
+                <label class="fieldLbl">TPIC phone</label>
+                <input id="tpicPhone" type="text" placeholder="Phone" oninput="markSettingsDirty()" />
+              </div>
+              <div class="field">
+                <label class="fieldLbl">MMIC name</label>
+                <input id="mmicName" type="text" placeholder="Name" oninput="markSettingsDirty()" />
+              </div>
+              <div class="field">
+                <label class="fieldLbl">MMIC phone</label>
+                <input id="mmicPhone" type="text" placeholder="Phone" oninput="markSettingsDirty()" />
+              </div>
             </div>
             <div id="settingsWarn" class="warn" style="display:none; margin-top:.5rem;"></div>
             <div class="settings-actions" style="margin-top:.6rem; display:flex; align-items:center; gap:.6rem;">
@@ -589,6 +649,7 @@
   //   float_hours numeric default 0,
   //   tpic_name text, tpic_phone text,
   //   mmic_name text, mmic_phone text,
+  //   fms_ref text, ccil_ref text, tda_ref text,
   //   updated_at timestamptz default now()
   // );
 
@@ -602,6 +663,9 @@
       tpic_phone: (document.getElementById('tpicPhone')?.value || '').trim(),
       mmic_name: (document.getElementById('mmicName')?.value || '').trim(),
       mmic_phone: (document.getElementById('mmicPhone')?.value || '').trim(),
+      fms_ref: (document.getElementById('fmsRef')?.value || '').trim(),
+      ccil_ref: (document.getElementById('ccilRef')?.value || '').trim(),
+      tda_ref: (document.getElementById('tdaRef')?.value || '').trim(),
     };
   }
 
@@ -613,6 +677,9 @@
     const tp = document.getElementById('tpicPhone'); if (tp) tp.value = s.tpic_phone || '';
     const mn = document.getElementById('mmicName'); if (mn) mn.value = s.mmic_name || '';
     const mp = document.getElementById('mmicPhone'); if (mp) mp.value = s.mmic_phone || '';
+    const fr = document.getElementById('fmsRef'); if (fr) fr.value = s.fms_ref || '';
+    const cr = document.getElementById('ccilRef'); if (cr) cr.value = s.ccil_ref || '';
+    const tr = document.getElementById('tdaRef'); if (tr) tr.value = s.tda_ref || '';
   }
 
   async function loadPlanSettings(){
@@ -691,6 +758,9 @@
     tpic_phone: (document.getElementById('tpicPhone')?.value ?? '').trim() || null,
     mmic_name: (document.getElementById('mmicName')?.value ?? '').trim() || null,
     mmic_phone: (document.getElementById('mmicPhone')?.value ?? '').trim() || null,
+    fms_ref: (document.getElementById('fmsRef')?.value ?? '').trim() || null,
+    ccil_ref: (document.getElementById('ccilRef')?.value ?? '').trim() || null,
+    tda_ref: (document.getElementById('tdaRef')?.value ?? '').trim() || null,
     updated_at: new Date().toISOString()
   };
 
@@ -761,67 +831,80 @@ function minutesDiff(aIso, bIso){
 
   function updateTimingHealth(){
     const line = document.getElementById('timingHealthLine');
-    const spark = document.getElementById('timingSpark');
-    if (!line || !spark) return;
-    if (!activePlan){ line.textContent = 'Set a float to calculate health.'; spark.innerHTML=''; return; }
-
-    const settings = settingsCache[activePlan.id] || { float_hours: 0, float_minutes: 0 };
-    const floatMin = (settings.float_hours != null) ? Math.round(Number(settings.float_hours||0)*60) : Number(settings.float_minutes||0);
-
-    const trackable = getTrackableTaskIds();
-
-    const completedSeries = tasksCache
-      .filter(t => trackable.has(t.id) && t.completed_at && t.predicted_time)
-      .sort((a,b) => (a.task_number||0)-(b.task_number||0))
-      .map(t => minutesDiff(t.completed_at, t.predicted_time))
-      .filter(v => typeof v === 'number');
-
-    if (!completedSeries.length){
-      line.textContent = floatMin ? `No completed milestones with predictions yet. Float set: ${floatMin}m.` : 'Set a float to calculate health.';
-      spark.innerHTML='';
+    const ragLine = document.getElementById('timingRagLine');
+    const detailLine = document.getElementById('timingDetailLine');
+    if (!line || !ragLine || !detailLine) return;
+    if (!activePlan){
+      line.textContent = 'Set a float to calculate health.';
+      ragLine.textContent = 'No timing status yet.';
+      detailLine.textContent = '';
       return;
     }
 
-    const last = completedSeries[completedSeries.length-1];
-    const down = last > 0;
-    const remaining = floatMin - (down ? last : 0);
+    const settings = settingsCache[activePlan.id] || { float_hours: 0, float_minutes: 0 };
+    const floatMin = (settings.float_hours != null)
+      ? Math.round(Number(settings.float_hours || 0) * 60)
+      : Number(settings.float_minutes || 0);
 
-    line.textContent = down
-      ? `${last} min down against timings with float of ${floatMin}m (${Math.max(0,remaining)}m remaining)`
-      : `${Math.abs(last)} min up against timings with float of ${floatMin}m`;
+    const trackable = getTrackableTaskIds();
 
-    // Progress semantics: colour based on float health
+    // Completed tasks with predictions (in task order)
+    const completedPred = tasksCache
+      .filter(t => trackable.has(t.id) && t.completed_at && t.predicted_time)
+      .sort((a,b) => (Number(a.task_number||0)) - (Number(b.task_number||0)));
+
+    if (!completedPred.length){
+      line.textContent = floatMin ? `No completed milestones with predictions yet. Float set: ${floatMin}m.` : 'Set a float to calculate health.';
+      ragLine.textContent = 'No timing status yet.';
+      detailLine.textContent = '';
+      const fill = document.getElementById('progFill');
+      if (fill){ fill.classList.remove('good','amber','bad'); fill.classList.add('good'); }
+      return;
+    }
+
+    const lastTask = completedPred[completedPred.length-1];
+    const last = minutesDiff(lastTask.completed_at, lastTask.predicted_time); // + late, - early
+    const abs = Math.abs(last);
+
+    // Simple RAG: based on the last completed vs predicted
+    let statusText;
+    let cls;
+    if (last === 0){
+      statusText = 'On target vs plan';
+      cls = 'pill-green';
+    } else if (last < 0){
+      statusText = `${abs} min ahead of target`;
+      cls = 'pill-green';
+    } else {
+      statusText = `${last} min behind target`;
+      cls = (last <= 10) ? 'pill-amber' : 'pill-red';
+    }
+
+    ragLine.innerHTML = `Work status: <span class="pill ${cls}">${escapeHtml(statusText)}</span>`;
+
+    // Last checkpoint (always shown once)
+    const checkpointText = `Last checkpoint: ${getTaskDisplayNumber(lastTask)} completed ${fmtDT(lastTask.completed_at)}.`;
+    line.textContent = checkpointText;
+
+    // Float narrative (optional)
+    if (!floatMin){
+      detailLine.textContent = '';
+    } else {
+      const remaining = (last > 0) ? (floatMin - last) : floatMin;
+      detailLine.textContent = (last > 0)
+        ? `${last} min down against timings with float of ${floatMin}m (${Math.max(0,remaining)}m remaining)`
+        : `${abs} min up against timings with float of ${floatMin}m`;
+    }
+
+    // Progress semantics colour based on float health
     const fill = document.getElementById('progFill');
     if (fill) {
       fill.classList.remove('good','amber','bad');
       if (!floatMin) fill.classList.add('good');
-      else if (down && remaining < 0) fill.classList.add('bad');
-      else if (down && remaining <= 10) fill.classList.add('amber');
+      else if (last > 0 && (floatMin - last) < 0) fill.classList.add('bad');
+      else if (last > 0 && (floatMin - last) <= 10) fill.classList.add('amber');
       else fill.classList.add('good');
     }
-
-    const rawMaxAbs = Math.max(5, ...completedSeries.map(v => Math.abs(v)));
-    const maxAbs = Math.min(120, rawMaxAbs); // cap so the line doesn't go flat
-    // Use a stable viewBox, but ensure values never render outside the box.
-    const w=280, h=56, pad=6;
-    const xStep = completedSeries.length>1 ? (w-2*pad)/(completedSeries.length-1) : 0;
-    const yMid = h/2;
-    const exaggeration = 1.0; // standard scale (stable layout)
-    const yScale = (h/2 - pad) / (maxAbs * exaggeration);
-    const pts = completedSeries.map((v,i)=>{
-      // Clamp so the path can't escape the SVG (e.g. if maxAbs is capped).
-      const vc = Math.max(-maxAbs, Math.min(maxAbs, v));
-      const x = pad + i*xStep;
-      const y = yMid + (vc * yScale);
-      return [x,y];
-    });
-    const d = pts.map((p,i)=> (i? 'L':'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
-    const color = down ? '#b91c1c' : '#16a34a';
-    spark.innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="overflow:hidden">
-      <line x1="0" y1="${yMid}" x2="${w}" y2="${yMid}" stroke="#e5e7eb" stroke-width="1"/>
-      <path d="${d}" fill="none" stroke="${color}" stroke-width="2"/>
-      <circle cx="${pts[pts.length-1][0].toFixed(1)}" cy="${pts[pts.length-1][1].toFixed(1)}" r="3" fill="${color}"/>
-    </svg>`;
   }
 
 let activePlan = null;
@@ -849,6 +932,27 @@ let activePlan = null;
   let branchByOrigin = new Map();        // originTaskId -> [groupKey,...]
   let branchTaskMeta = new Map();        // taskId -> { groupKey, originTaskNumber, label, seq }
   let collapsedBranchGroups = new Set(); // groupKeys hidden
+
+  function collapsedStorageKey(){
+    return activePlan?.id ? `milestone_collapsed_${activePlan.id}` : null;
+  }
+  function loadCollapsedBranchGroups(){
+    try{
+      const k = collapsedStorageKey();
+      if (!k) return;
+      const raw = localStorage.getItem(k);
+      if (!raw) return;
+      const arr = JSON.parse(raw);
+      if (Array.isArray(arr)) collapsedBranchGroups = new Set(arr.map(String));
+    }catch(e){ /* ignore */ }
+  }
+  function persistCollapsedBranchGroups(){
+    try{
+      const k = collapsedStorageKey();
+      if (!k) return;
+      localStorage.setItem(k, JSON.stringify(Array.from(collapsedBranchGroups)));
+    }catch(e){ /* ignore */ }
+  }
 
 
   // Branch activation state (contingency lines only count when activated)
@@ -914,6 +1018,43 @@ let activePlan = null;
     branchActiveGroups.add(groupKeyStr);
     collapsedBranchGroups.delete(groupKeyStr);
 
+    await loadEverythingForActivePlan();
+  }
+
+  async function deactivateBranchLine(groupKeyStr){
+    const g = branchGroups.get(groupKeyStr);
+    if (!activePlan || !g) return;
+    if (!confirm(`Deactivate branch "${g.label}" and restore the main line?`)) return;
+
+    // Persist deactivate (ignore errors)
+    try{
+      const { error } = await supabaseClient
+        .from('plan_branch_states')
+        .upsert({
+          plan_id: activePlan.id,
+          origin_task_id: g.originTaskId,
+          label: g.label,
+          is_active: false,
+          updated_at: new Date().toISOString()
+        }, { onConflict: "plan_id,origin_task_id,label" });
+      if (error) throw error;
+    }catch(e){ /* ignore */ }
+
+    // Unmark N/A main tasks after divergence
+    try{
+      const toRestore = tasksCache
+        .filter(t => branchInfoCache.main.has(t.id) && t.is_na && Number(t.task_number||0) > Number(g.originTaskNumber||0))
+        .map(t => t.id);
+      if (toRestore.length){
+        const { error } = await supabaseClient
+          .from('tasks')
+          .update({ is_na: false })
+          .in('id', toRestore);
+        if (error) throw error;
+      }
+    }catch(e){ /* ignore */ }
+
+    branchActiveGroups.delete(groupKeyStr);
     await loadEverythingForActivePlan();
   }
 
@@ -1020,6 +1161,7 @@ let activePlan = null;
   function toggleBranchGroup(groupKey) {
     if (collapsedBranchGroups.has(groupKey)) collapsedBranchGroups.delete(groupKey);
     else collapsedBranchGroups.add(groupKey);
+    persistCollapsedBranchGroups();
     renderTasks();
     updateProgressBar();
     updateTimingHealth();
@@ -1043,7 +1185,27 @@ let activePlan = null;
     return `<span class="pill pill-branch">Branch: ${escapeHtml(meta.label)}</span>`;
   }
 
-  function renderBranchTogglesForOrigin(originTaskId) {
+  function getBranchCueHtml(taskId){
+    const meta = branchTaskMeta.get(taskId);
+    if (!meta) return '';
+    if (meta.seq !== 1) return '';
+    const gk = meta.groupKey;
+    if (!branchActiveGroups.has(gk)) return '';
+    return `<div class="branchCue">↳ Branch active from step ${meta.originTaskNumber}: ${escapeHtml(meta.label)}</div>`;
+  }
+
+  
+  function renderOriginBranchCue(taskId){
+    const groups = branchByOrigin.get(taskId) || [];
+    if (!groups.length) return '';
+    // show cue only if any group is active
+    const active = groups.find(gk => branchActiveGroups.has(gk));
+    if (!active) return '';
+    const label = branchGroups.get(active)?.label || 'Branch';
+    return `<div class="branchCue">↘ Branch active: ${escapeHtml(label)}</div>`;
+  }
+
+function renderBranchTogglesForOrigin(originTaskId) {
     const groups = branchByOrigin.get(originTaskId) || [];
     if (!groups.length) return '';
     return groups.map(gk => {
@@ -1064,17 +1226,22 @@ let activePlan = null;
     const gk = meta.groupKey;
     const isActive = branchActiveGroups.has(gk);
     if (isActive) {
-      return `<span class="pill pill-branch" style="opacity:.9;">Active</span>`;
+      const safeGk = jsEscape(gk);
+      return `<button class="mini light" onclick="deactivateBranchLine('${safeGk}')">Deactivate</button>`;
     }
 
     // Only show if the branch line exists (it does) and isn't active yet
-    const safeGk = escapeHtml(gk).replaceAll("'","\'");
+    const safeGk = jsEscape(gk);
     return `<button class="mini" style="background:#111827;color:#fff;border-color:#111827;" onclick="activateBranchLine('${safeGk}')">Activate Branch Task Line</button>`;
   }
 
+  function jsEscape(s){
+    return String(s||"" )
+      .replaceAll("\\", "\\\\")
+      .replaceAll("'", "\\'");
+  }
 
-
-  // ===== Helpers =====
+// ===== Helpers =====
   function setWarning(msg) {
     const el = document.getElementById('setupWarning');
     el.style.display = 'block';
@@ -1399,6 +1566,8 @@ let activePlan = null;
   }
 
   async function loadEverythingForActivePlan() {
+    loadCollapsedBranchGroups();
+
     renderPlanHeader();
     // Load tasks + edges first so we can determine main vs branches before rendering cards
     await loadTasks();
@@ -1478,7 +1647,20 @@ let activePlan = null;
   }
 
   // ===== Tasks + subtasks UI =====
-  function renderTasks() {
+  
+  // ===== UI helpers: task action menu =====
+  function closeAllActionMenus(){
+    document.querySelectorAll('.actionMenu.open').forEach(el=>el.classList.remove('open'));
+  }
+  function toggleActionMenu(ev, taskId){
+    ev?.stopPropagation?.();
+    closeAllActionMenus();
+    const el = document.getElementById('am-' + taskId);
+    if (el) el.classList.toggle('open');
+  }
+  document.addEventListener('click', function(){ closeAllActionMenus(); });
+
+function renderTasks() {
     // keep KPIs fresh
 
     const list = document.getElementById('taskList');
@@ -1497,7 +1679,7 @@ let activePlan = null;
       if (isTaskHiddenByBranchCollapse(t.id)) return;
       const d = document.createElement('div');
       const vizClass = getTaskVizClass(t);
-      d.className = `task ${ragClassForTask(t)} ${vizClass}`;
+      d.className = `task ${ragClassForTask(t)} ${vizClass} ${t.is_na ? 'na' : ''}`;
       d.id = `task-${t.id}`;
 
       const hasPred = !!t.predicted_time;
@@ -1541,22 +1723,28 @@ let activePlan = null;
       d.innerHTML = `
         <div class="taskNum">${getTaskDisplayNumber(t)}</div>
         <div>
-          <div class="taskTitle">${escapeHtml(t.title)} ${getBranchBadgeHtml(t.id)} ${getOriginContingencyPill(t.id)} ${t.is_na ? `<span class="pill pill-na">N/A</span>` : ``}</div>
+          <div class="taskTitle">${escapeHtml(t.title)} ${getBranchBadgeHtml(t.id)}${getBranchCueHtml(t.id)} ${getOriginContingencyPill(t.id)} ${t.is_na ? `<span class="pill pill-na">N/A</span>` : ``}</div>
           <div class="taskMeta muted">${timingText}
             ${hasPred && isDone ? variancePill(varianceMins) : ''}
             ${hasPred && !isDone ? duePill(dueDelta) : ''}
           </div>
 
           <div class="controls" style="margin-top:.5rem;">
-            <button class="mini light" onclick="editTaskMenu('${t.id}')">Edit</button>
-            <button class="mini light" onclick="addNextFromTask('${t.id}')">Add next</button>
-            <button class="mini light" onclick="addBranchFromTask('${t.id}')">Add branch</button>
+            <div class="actionMenu" id="am-${t.id}">
+              <button class="mini light plusBtn" onclick="toggleActionMenu(event,'${t.id}')">+</button>
+              <div class="menu" onclick="event.stopPropagation()">
+                <button class="mini light" onclick="editTaskMenu('${t.id}')">Edit</button>
+                <button class="mini light" onclick="addNextFromTask('${t.id}')">Add next</button>
+                <button class="mini light" onclick="addBranchFromTask('${t.id}')">Add branch</button>
+              </div>
+            </div>
             ${renderBranchTogglesForOrigin(t.id)} ${renderBranchActivateButton(t.id)}
           </div>
+          ${renderOriginBranchCue(t.id)}
 
           ${subHtml}
         </div>
-        <div>
+        <div class="rightCol">
           ${rightTop}
           <input type="datetime-local" ${(isDone||t.is_na) ? 'disabled' : ''} value="${isoToLocalInputValue(t.predicted_time)}" onchange="setPredictedTime('${t.id}', this.value)" />
           <div style="margin-top:.5rem;">
@@ -1588,6 +1776,7 @@ let activePlan = null;
     }
 
     await loadTasks();
+    persistCollapsedBranchGroups();
     renderTasks();
     updateProgressBar();
     updateTimingHealth();
@@ -1682,6 +1871,43 @@ let activePlan = null;
     await loadEverythingForActivePlan();
   }
 
+  async function deactivateBranchLine(groupKeyStr){
+    const g = branchGroups.get(groupKeyStr);
+    if (!activePlan || !g) return;
+    if (!confirm(`Deactivate branch "${g.label}" and restore the main line?`)) return;
+
+    // Persist deactivate (ignore errors)
+    try{
+      const { error } = await supabaseClient
+        .from('plan_branch_states')
+        .upsert({
+          plan_id: activePlan.id,
+          origin_task_id: g.originTaskId,
+          label: g.label,
+          is_active: false,
+          updated_at: new Date().toISOString()
+        }, { onConflict: "plan_id,origin_task_id,label" });
+      if (error) throw error;
+    }catch(e){ /* ignore */ }
+
+    // Unmark N/A main tasks after divergence
+    try{
+      const toRestore = tasksCache
+        .filter(t => branchInfoCache.main.has(t.id) && t.is_na && Number(t.task_number||0) > Number(g.originTaskNumber||0))
+        .map(t => t.id);
+      if (toRestore.length){
+        const { error } = await supabaseClient
+          .from('tasks')
+          .update({ is_na: false })
+          .in('id', toRestore);
+        if (error) throw error;
+      }
+    }catch(e){ /* ignore */ }
+
+    branchActiveGroups.delete(groupKeyStr);
+    await loadEverythingForActivePlan();
+  }
+
   async function toggleTaskComplete(taskId) {
     const t = tasksCache.find(x => x.id === taskId);
     if (!t) return;
@@ -1711,6 +1937,43 @@ let activePlan = null;
     await loadEverythingForActivePlan();
   }
 
+  async function deactivateBranchLine(groupKeyStr){
+    const g = branchGroups.get(groupKeyStr);
+    if (!activePlan || !g) return;
+    if (!confirm(`Deactivate branch "${g.label}" and restore the main line?`)) return;
+
+    // Persist deactivate (ignore errors)
+    try{
+      const { error } = await supabaseClient
+        .from('plan_branch_states')
+        .upsert({
+          plan_id: activePlan.id,
+          origin_task_id: g.originTaskId,
+          label: g.label,
+          is_active: false,
+          updated_at: new Date().toISOString()
+        }, { onConflict: "plan_id,origin_task_id,label" });
+      if (error) throw error;
+    }catch(e){ /* ignore */ }
+
+    // Unmark N/A main tasks after divergence
+    try{
+      const toRestore = tasksCache
+        .filter(t => branchInfoCache.main.has(t.id) && t.is_na && Number(t.task_number||0) > Number(g.originTaskNumber||0))
+        .map(t => t.id);
+      if (toRestore.length){
+        const { error } = await supabaseClient
+          .from('tasks')
+          .update({ is_na: false })
+          .in('id', toRestore);
+        if (error) throw error;
+      }
+    }catch(e){ /* ignore */ }
+
+    branchActiveGroups.delete(groupKeyStr);
+    await loadEverythingForActivePlan();
+  }
+
   function nextLetter(existingLetters) {
     const alphabet = 'abcdefghijklmnopqrstuvwxyz';
     for (const ch of alphabet) {
@@ -1734,6 +1997,7 @@ let activePlan = null;
     if (error) { setWarning(`Failed to add subtask: ${error.message}`); return; }
 
     await loadSubtasks();
+    persistCollapsedBranchGroups();
     renderTasks();
     updateProgressBar();
     updateTimingHealth();
@@ -1748,6 +2012,7 @@ let activePlan = null;
     if (error) { setWarning(`Failed to complete subtask: ${error.message}`); return; }
 
     await loadSubtasks();
+    persistCollapsedBranchGroups();
     renderTasks();
     updateProgressBar();
     updateTimingHealth();
@@ -1775,6 +2040,43 @@ let activePlan = null;
     await loadEverythingForActivePlan();
   }
 
+  async function deactivateBranchLine(groupKeyStr){
+    const g = branchGroups.get(groupKeyStr);
+    if (!activePlan || !g) return;
+    if (!confirm(`Deactivate branch "${g.label}" and restore the main line?`)) return;
+
+    // Persist deactivate (ignore errors)
+    try{
+      const { error } = await supabaseClient
+        .from('plan_branch_states')
+        .upsert({
+          plan_id: activePlan.id,
+          origin_task_id: g.originTaskId,
+          label: g.label,
+          is_active: false,
+          updated_at: new Date().toISOString()
+        }, { onConflict: "plan_id,origin_task_id,label" });
+      if (error) throw error;
+    }catch(e){ /* ignore */ }
+
+    // Unmark N/A main tasks after divergence
+    try{
+      const toRestore = tasksCache
+        .filter(t => branchInfoCache.main.has(t.id) && t.is_na && Number(t.task_number||0) > Number(g.originTaskNumber||0))
+        .map(t => t.id);
+      if (toRestore.length){
+        const { error } = await supabaseClient
+          .from('tasks')
+          .update({ is_na: false })
+          .in('id', toRestore);
+        if (error) throw error;
+      }
+    }catch(e){ /* ignore */ }
+
+    branchActiveGroups.delete(groupKeyStr);
+    await loadEverythingForActivePlan();
+  }
+
   async function closePlan() {
     if (!activePlan) { setWarning('No active plan selected.'); return; }
     if (!confirm('Close this incident and lock the plan? This prevents further edits.')) return;
@@ -1792,6 +2094,7 @@ let activePlan = null;
     edgesCache = [];
     await loadPlans();
     renderPlanHeader();
+    persistCollapsedBranchGroups();
     renderTasks();
     updateProgressBar();
     updateTimingHealth();
@@ -2336,6 +2639,43 @@ let activePlan = null;
     activePlan = newPlan;
     setView('open');
     await refreshAll();
+    await loadEverythingForActivePlan();
+  }
+
+  async function deactivateBranchLine(groupKeyStr){
+    const g = branchGroups.get(groupKeyStr);
+    if (!activePlan || !g) return;
+    if (!confirm(`Deactivate branch "${g.label}" and restore the main line?`)) return;
+
+    // Persist deactivate (ignore errors)
+    try{
+      const { error } = await supabaseClient
+        .from('plan_branch_states')
+        .upsert({
+          plan_id: activePlan.id,
+          origin_task_id: g.originTaskId,
+          label: g.label,
+          is_active: false,
+          updated_at: new Date().toISOString()
+        }, { onConflict: "plan_id,origin_task_id,label" });
+      if (error) throw error;
+    }catch(e){ /* ignore */ }
+
+    // Unmark N/A main tasks after divergence
+    try{
+      const toRestore = tasksCache
+        .filter(t => branchInfoCache.main.has(t.id) && t.is_na && Number(t.task_number||0) > Number(g.originTaskNumber||0))
+        .map(t => t.id);
+      if (toRestore.length){
+        const { error } = await supabaseClient
+          .from('tasks')
+          .update({ is_na: false })
+          .in('id', toRestore);
+        if (error) throw error;
+      }
+    }catch(e){ /* ignore */ }
+
+    branchActiveGroups.delete(groupKeyStr);
     await loadEverythingForActivePlan();
   }
 
