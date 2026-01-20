@@ -388,14 +388,27 @@
     .setting label{ display:block; font-size:.8rem; color: var(--muted); font-weight:800; margin-bottom:.35rem; }
     .setting input[type="number"], .setting input[type="text"]{ width:100%; padding:.5rem .6rem; border:1px solid #d1d5db; border-radius:.65rem; font:inherit; }
     .cmdGrid{ display:grid; grid-template-columns: 1fr 1fr; gap:.5rem; }
-    .spark{ margin-top:.4rem; height:56px; }
+    /* Trend sparkline container: always clip so it can't escape the card */
+    .spark{ margin-top:.4rem; height:56px; width:100%; overflow:hidden; }
+    .spark svg{ display:block; width:100%; height:56px; overflow:hidden; }
 
     @media (max-width: 900px){
       .settingsGrid{ grid-template-columns: 1fr; }
       .cmdGrid{ grid-template-columns: 1fr; }
     }
 
-  </style>
+  
+
+    /* Visual hierarchy */
+    .task.completed { background:#f9fafb; opacity:.92; }
+    .task.current { border-color:#111827; box-shadow: 0 0 0 2px rgba(17,24,39,.12); }
+
+    /* Progress semantics */
+    .progFill.good { background: var(--good); }
+    .progFill.amber { background: var(--amber); }
+    .progFill.bad { background: var(--danger); }
+
+</style>
 </head>
 <body>
 
@@ -422,6 +435,7 @@
         
         <div class="kpis">
           <span class="kpi" id="kpiStatus">Status: -</span>
+          <span class="kpi" id="kpiViewers">Viewers: -</span>
         </div>
 
         <div class="progRow">
@@ -489,6 +503,80 @@
   const SUPABASE_URL = "https://ungtmfwxqawkdiflmora.supabase.co";
   const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVuZ3RtZnd4cWF3a2RpZmxtb3JhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjIxMDY4NjQsImV4cCI6MjA3NzY4Mjg2NH0.Yaq0XfbbkwxJDUoiPCS7bLVBy70Wa-NOOWIxkpRRxdc";
   const supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+  // ===== Collaboration-lite: viewer count (presence) =====
+  // Uses a lightweight heartbeat table 'plan_viewers'. If the table doesn't exist, UI shows '-'.
+  // SQL (Supabase):
+  // create table if not exists public.plan_viewers(
+  //   plan_id uuid references public.plans(id) on delete cascade,
+  //   viewer_id text not null,
+  //   last_seen timestamptz not null default now(),
+  //   primary key(plan_id, viewer_id)
+  // );
+  // alter table public.plan_viewers disable row level security;
+  const VIEWER_TTL_MS = 120000; // 2 minutes
+  const VIEWER_PING_MS = 30000; // 30 seconds
+  let viewerId = null;
+  let viewerTimer = null;
+
+  function getOrCreateViewerId(){
+    try{
+      const k = 'milestonedash_viewer_id';
+      let v = localStorage.getItem(k);
+      if (!v) {
+        v = (window.crypto && crypto.randomUUID) ? crypto.randomUUID() : (String(Math.random()).slice(2) + Date.now());
+        localStorage.setItem(k, v);
+      }
+      return v;
+    } catch(e){
+      return String(Math.random()).slice(2) + Date.now();
+    }
+  }
+
+  async function touchViewer(){
+    if (!activePlan) return;
+    if (!viewerId) viewerId = getOrCreateViewerId();
+    try{
+      await supabaseClient
+        .from('plan_viewers')
+        .upsert({ plan_id: activePlan.id, viewer_id: viewerId, last_seen: new Date().toISOString() }, { onConflict: 'plan_id,viewer_id' });
+    } catch(e){
+      // ignore
+    }
+  }
+
+  async function updateViewerCount(){
+    const el = document.getElementById('kpiViewers');
+    if (!el) return;
+    if (!activePlan) { el.textContent = 'Viewers: -'; return; }
+    try{
+      const sinceIso = new Date(Date.now() - VIEWER_TTL_MS).toISOString();
+      const { data, error } = await supabaseClient
+        .from('plan_viewers')
+        .select('viewer_id')
+        .eq('plan_id', activePlan.id)
+        .gte('last_seen', sinceIso);
+      if (error) throw error;
+      const uniq = new Set((data||[]).map(r => r.viewer_id));
+      el.textContent = 'Viewers: ' + uniq.size;
+    } catch(e){
+      el.textContent = 'Viewers: -';
+    }
+  }
+
+  async function startViewerPresence(){
+    // restart per-plan
+    if (viewerTimer) { clearInterval(viewerTimer); viewerTimer = null; }
+    if (!activePlan) { updateViewerCount(); return; }
+    viewerId = viewerId || getOrCreateViewerId();
+    await touchViewer();
+    await updateViewerCount();
+    viewerTimer = setInterval(async () => {
+      await touchViewer();
+      await updateViewerCount();
+    }, VIEWER_PING_MS);
+  }
+
 
   // ===== App state =====
   
@@ -702,21 +790,34 @@ function minutesDiff(aIso, bIso){
       ? `${last} min down against timings with float of ${floatMin}m (${Math.max(0,remaining)}m remaining)`
       : `${Math.abs(last)} min up against timings with float of ${floatMin}m`;
 
+    // Progress semantics: colour based on float health
+    const fill = document.getElementById('progFill');
+    if (fill) {
+      fill.classList.remove('good','amber','bad');
+      if (!floatMin) fill.classList.add('good');
+      else if (down && remaining < 0) fill.classList.add('bad');
+      else if (down && remaining <= 10) fill.classList.add('amber');
+      else fill.classList.add('good');
+    }
+
     const rawMaxAbs = Math.max(5, ...completedSeries.map(v => Math.abs(v)));
     const maxAbs = Math.min(120, rawMaxAbs); // cap so the line doesn't go flat
+    // Use a stable viewBox, but ensure values never render outside the box.
     const w=280, h=56, pad=6;
     const xStep = completedSeries.length>1 ? (w-2*pad)/(completedSeries.length-1) : 0;
     const yMid = h/2;
     const exaggeration = 1.0; // standard scale (stable layout)
     const yScale = (h/2 - pad) / (maxAbs * exaggeration);
     const pts = completedSeries.map((v,i)=>{
+      // Clamp so the path can't escape the SVG (e.g. if maxAbs is capped).
+      const vc = Math.max(-maxAbs, Math.min(maxAbs, v));
       const x = pad + i*xStep;
-      const y = yMid + (v * yScale);
+      const y = yMid + (vc * yScale);
       return [x,y];
     });
     const d = pts.map((p,i)=> (i? 'L':'M') + p[0].toFixed(1) + ' ' + p[1].toFixed(1)).join(' ');
     const color = down ? '#b91c1c' : '#16a34a';
-    spark.innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none">
+    spark.innerHTML = `<svg viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" style="overflow:hidden">
       <line x1="0" y1="${yMid}" x2="${w}" y2="${yMid}" stroke="#e5e7eb" stroke-width="1"/>
       <path d="${d}" fill="none" stroke="${color}" stroke-width="2"/>
       <circle cx="${pts[pts.length-1][0].toFixed(1)}" cy="${pts[pts.length-1][1].toFixed(1)}" r="3" fill="${color}"/>
@@ -1084,6 +1185,33 @@ let activePlan = null;
   }
 
 
+  function getOriginContingencyPill(taskId){
+    const groups = branchByOrigin.get(taskId) || [];
+    if (!groups.length) return '';
+    // If any branch from this origin is active, show Active; else Ready
+    const anyActive = groups.some(gk => branchActiveGroups && branchActiveGroups.has(gk));
+    const label = anyActive ? 'Contingency: Active' : 'Contingency: Ready';
+    const klass = anyActive ? 'pill-amber' : 'pill-branch';
+    return `<span class="pill ${klass}">${label}</span>`;
+  }
+
+  function getTaskVizClass(t){
+    // Closed plan: no special current indicator
+    if (!activePlan || activePlan.status === 'closed') return '';
+
+    if (t.completed_at || t.is_na) return 'completed';
+
+    // current task = first trackable task not done, favor mainline
+    const trackable = getTrackableTaskIds();
+    const pending = tasksCache
+      .filter(x => trackable.has(x.id) && !x.completed_at && !x.is_na)
+      .sort((a,b) => Number(a.task_number||0) - Number(b.task_number||0));
+
+    const current = pending[0];
+    return (current && current.id === t.id) ? 'current' : '';
+  }
+
+
   function applyFlowZoom() {
     const svg = document.getElementById('flowSvg');
     const label = document.getElementById('zoomLabel');
@@ -1251,6 +1379,8 @@ let activePlan = null;
       t.onclick = async () => {
         activePlan = p;
         await loadEverythingForActivePlan();
+        await loadPlanSettings();
+        await startViewerPresence();
         repaintTabs();
       };
       tabs.appendChild(t);
@@ -1279,6 +1409,8 @@ let activePlan = null;
     renderTasks();
     updateProgressBar();
     updateTimingHealth();
+    await loadPlanSettings();
+    await startViewerPresence();
 
   }
 
@@ -1364,7 +1496,8 @@ let activePlan = null;
       if (isTaskHiddenByBranchCollapse(t.id)) return;
       if (isTaskHiddenByBranchCollapse(t.id)) return;
       const d = document.createElement('div');
-      d.className = `task ${ragClassForTask(t)}`;
+      const vizClass = getTaskVizClass(t);
+      d.className = `task ${ragClassForTask(t)} ${vizClass}`;
       d.id = `task-${t.id}`;
 
       const hasPred = !!t.predicted_time;
@@ -1408,14 +1541,14 @@ let activePlan = null;
       d.innerHTML = `
         <div class="taskNum">${getTaskDisplayNumber(t)}</div>
         <div>
-          <div class="taskTitle">${escapeHtml(t.title)} ${getBranchBadgeHtml(t.id)} ${t.is_na ? `<span class="pill pill-na">N/A</span>` : ``}</div>
+          <div class="taskTitle">${escapeHtml(t.title)} ${getBranchBadgeHtml(t.id)} ${getOriginContingencyPill(t.id)} ${t.is_na ? `<span class="pill pill-na">N/A</span>` : ``}</div>
           <div class="taskMeta muted">${timingText}
             ${hasPred && isDone ? variancePill(varianceMins) : ''}
             ${hasPred && !isDone ? duePill(dueDelta) : ''}
           </div>
 
           <div class="controls" style="margin-top:.5rem;">
-            <button class="mini light" onclick="editTaskTitle('${t.id}')">Edit</button>
+            <button class="mini light" onclick="editTaskMenu('${t.id}')">Edit</button>
             <button class="mini light" onclick="addNextFromTask('${t.id}')">Add next</button>
             <button class="mini light" onclick="addBranchFromTask('${t.id}')">Add branch</button>
             ${renderBranchTogglesForOrigin(t.id)} ${renderBranchActivateButton(t.id)}
@@ -1427,7 +1560,7 @@ let activePlan = null;
           ${rightTop}
           <input type="datetime-local" ${(isDone||t.is_na) ? 'disabled' : ''} value="${isoToLocalInputValue(t.predicted_time)}" onchange="setPredictedTime('${t.id}', this.value)" />
           <div style="margin-top:.5rem;">
-            <button class="complete ${isDone ? 'done' : ''}" ${(isDone||t.is_na) ? 'disabled' : ''} onclick="completeTask('${t.id}')">${isDone ? '✓ Done' : 'Complete'}</button>
+            <button class="complete ${isDone ? 'done' : ''}" ${(t.is_na) ? 'disabled' : ''} onclick="toggleTaskComplete('${t.id}')">${isDone ? '✓ Done (undo)' : 'Complete'}</button>
           </div>
         </div>
       `;
@@ -1460,24 +1593,70 @@ let activePlan = null;
     updateTimingHealth();
   }
 
-  async function editTaskTitle(taskId) {
+  async function editTaskMenu(taskId) {
     const t = tasksCache.find(x => x.id === taskId);
     if (!t) return;
-    const title = prompt('Edit task title', t.title);
-    if (!title) return;
 
-    const { error } = await supabaseClient
-      .from('tasks')
-      .update({ title: title.trim() })
-      .eq('id', taskId);
+    const choice = prompt('Edit task\n1 = Change title\n2 = Delete task\n3 = Reorder task (mainline only)', '1');
+    if (!choice) return;
 
-    if (error) { setWarning(`Failed to edit task: ${error.message}`); return; }
+    if (choice.trim() === '1') {
+      const title = prompt('Edit task title', t.title);
+      if (!title) return;
+      const { error } = await supabaseClient
+        .from('tasks')
+        .update({ title: title.trim() })
+        .eq('id', taskId);
+      if (error) { setWarning(`Failed to edit task: ${error.message}`); return; }
+      await loadEverythingForActivePlan();
+      return;
+    }
 
-    await loadTasks();
-    await loadSubtasks();
-    renderTasks();
-    updateProgressBar();
-    updateTimingHealth();
+    if (choice.trim() === '2') {
+      if (!confirm('Delete this task? This cannot be undone.')) return;
+      const { error } = await supabaseClient
+        .from('tasks')
+        .delete()
+        .eq('id', taskId);
+      if (error) { setWarning(`Failed to delete task: ${error.message}`); return; }
+      await loadEverythingForActivePlan();
+      return;
+    }
+
+    if (choice.trim() === '3') {
+      const isBranch = !!branchTaskMeta.get(taskId);
+      if (isBranch) { setWarning('Reordering branch tasks is not supported. Reorder mainline tasks only.'); return; }
+
+      const mainTasks = tasksCache
+        .filter(x => branchInfoCache.main.has(x.id) && !x.is_na)
+        .sort((a,b)=>Number(a.task_number||0)-Number(b.task_number||0));
+
+      const currentPos = mainTasks.findIndex(x => x.id === taskId) + 1;
+      const newPosRaw = prompt(`Move this main task to position 1..${mainTasks.length}`, String(currentPos));
+      if (!newPosRaw) return;
+      const newPos = Math.max(1, Math.min(mainTasks.length, Number(newPosRaw)));
+      if (!Number.isFinite(newPos)) return;
+
+      // Rebuild task_numbers 1..N for mainline in the new order to avoid gaps/skips
+      const reordered = mainTasks.slice();
+      const [moved] = reordered.splice(currentPos-1, 1);
+      reordered.splice(newPos-1, 0, moved);
+
+      // Apply updates in sequence
+      for (let i=0; i<reordered.length; i++) {
+        const task = reordered[i];
+        const desired = i+1;
+        if (Number(task.task_number) === desired) continue;
+        const { error } = await supabaseClient
+          .from('tasks')
+          .update({ task_number: desired })
+          .eq('id', task.id);
+        if (error) { setWarning(`Failed to reorder task: ${error.message}`); return; }
+      }
+
+      await loadEverythingForActivePlan();
+      return;
+    }
   }
 
   async function addTask() {
@@ -1503,11 +1682,25 @@ let activePlan = null;
     await loadEverythingForActivePlan();
   }
 
-  async function completeTask(taskId) {
+  async function toggleTaskComplete(taskId) {
     const t = tasksCache.find(x => x.id === taskId);
+    if (!t) return;
     if (t?.is_na) { setWarning('That task is marked N/A (branch activated).'); return; }
     if (!activePlan) return;
 
+    // Undo complete
+    if (t.completed_at) {
+      if (!confirm('Are you sure you want to return this task to an incomplete state?')) return;
+      const { error } = await supabaseClient
+        .from('tasks')
+        .update({ completed_at: null })
+        .eq('id', taskId);
+      if (error) { setWarning(`Failed to undo completion: ${error.message}`); return; }
+      await loadEverythingForActivePlan();
+      return;
+    }
+
+    // Mark complete
     const { error } = await supabaseClient
       .from('tasks')
       .update({ completed_at: new Date().toISOString() })
@@ -1515,11 +1708,7 @@ let activePlan = null;
 
     if (error) { setWarning(`Failed to complete task: ${error.message}`); return; }
 
-    await loadTasks();
-    await loadSubtasks();
-    renderTasks();
-    updateProgressBar();
-    updateTimingHealth();
+    await loadEverythingForActivePlan();
   }
 
   function nextLetter(existingLetters) {
@@ -2202,7 +2391,7 @@ let activePlan = null;
 
 // ===== Boot =====
   setView('open');
-  loadPlans().then(() => { if (activePlan) loadEverythingForActivePlan(); });
+  loadPlans().then(async () => { if (activePlan) { await loadEverythingForActivePlan(); await loadPlanSettings(); await startViewerPresence(); } });
 </script>
 
 </body>
