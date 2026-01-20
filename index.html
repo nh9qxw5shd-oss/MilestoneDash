@@ -432,19 +432,23 @@
         <div class="settingsGrid">
           <div class="setting">
             <label>Time float (hours)</label>
-            <input id="floatHours" type="number" min="0" step="0.25" value="0" oninput="saveSettingsDebounced()" />
+            <input id="floatHours" type="number" min="0" step="0.25" value="0" oninput="markSettingsDirty()" />
             <div class="muted" id="timingHealthLine">Set a float to calculate health.</div>
             <div id="timingSpark" class="spark"></div>
           </div>
           <div class="setting">
             <label>Command structure</label>
             <div class="cmdGrid">
-              <input id="tpicName" type="text" placeholder="TPIC name" oninput="saveSettingsDebounced()" />
-              <input id="tpicPhone" type="text" placeholder="TPIC phone" oninput="saveSettingsDebounced()" />
-              <input id="mmicName" type="text" placeholder="MMIC name" oninput="saveSettingsDebounced()" />
-              <input id="mmicPhone" type="text" placeholder="MMIC phone" oninput="saveSettingsDebounced()" />
+              <input id="tpicName" type="text" placeholder="TPIC name" oninput="markSettingsDirty()" />
+              <input id="tpicPhone" type="text" placeholder="TPIC phone" oninput="markSettingsDirty()" />
+              <input id="mmicName" type="text" placeholder="MMIC name" oninput="markSettingsDirty()" />
+              <input id="mmicPhone" type="text" placeholder="MMIC phone" oninput="markSettingsDirty()" />
             </div>
             <div id="settingsWarn" class="warn" style="display:none; margin-top:.5rem;"></div>
+            <div class="settings-actions" style="margin-top:.6rem; display:flex; align-items:center; gap:.6rem;">
+              <button id="saveSettingsBtn" class="btn-primary" onclick="savePlanSettings(true)" disabled>Save settings</button>
+              <span id="settingsStatus" class="muted" style="font-size:.9rem; font-weight:800;">Loaded</span>
+            </div>
           </div>
         </div>
 
@@ -524,58 +528,106 @@
   }
 
   async function loadPlanSettings(){
-    const warn = document.getElementById('settingsWarn');
-    if (warn) warn.style.display = 'none';
+    const warn = document.getElementById("settingsWarn");
+    if (warn) warn.style.display = "none";
+
+    const btn = document.getElementById("saveSettingsBtn");
+    if (btn) btn.disabled = true;
+    setSettingsStatus("Loaded");
+
     if (!activePlan) return;
-    try{
-      const { data, error } = await supabaseClient.from('plan_settings').select('*').eq('plan_id', activePlan.id).maybeSingle();
+    try {
+      const { data, error } = await supabaseClient
+        .from("plan_settings")
+        .select("*")
+        .eq("plan_id", activePlan.id)
+        .maybeSingle();
       if (error) throw error;
       settingsCache[activePlan.id] = data || { plan_id: activePlan.id, float_hours: 0 };
       applySettingsToUI(settingsCache[activePlan.id]);
-    }catch(e){
+    } catch(e){
       settingsCache[activePlan.id] = settingsCache[activePlan.id] || { plan_id: activePlan.id, float_hours: 0 };
       applySettingsToUI(settingsCache[activePlan.id]);
       if (warn) {
-        warn.style.display='block';
-        warn.textContent = 'Settings are not saving yet. Create table plan_settings in Supabase (see SQL comment in file).';
+        warn.style.display = "block";
+        warn.textContent = "Settings could not be loaded. Saving may fail until plan_settings is available.";
       }
     }
   }
 
   function saveSettingsDebounced(){
-    if (!activePlan) return;
-    if (saveTimer) clearTimeout(saveTimer);
-    saveTimer = setTimeout(savePlanSettings, 450);
+    // Deprecated: explicit Save button is used now.
+    markSettingsDirty();
   }
 
-  async function savePlanSettings(){
-    if (!activePlan) return;
-    const inputs = getSettingsInputs();
-    const payload = {
-      plan_id: activePlan.id,
-      float_minutes: Math.round((inputs.float_hours||0) * 60),
-      tpic_name: inputs.tpic_name,
-      tpic_phone: inputs.tpic_phone,
-      mmic_name: inputs.mmic_name,
-      mmic_phone: inputs.mmic_phone,
-      updated_at: new Date().toISOString()
-    };
-    settingsCache[activePlan.id] = payload;
+
+  // Settings banner helpers (keep errors visible, avoid ReferenceError)
+  function showSettingsError(msg){
     const warn = document.getElementById('settingsWarn');
-    try{
-      const { error } = await supabaseClient.from('plan_settings').upsert(payload, { onConflict: 'plan_id' });
-      if (error) throw error;
-      if (warn) warn.style.display='none';
-    }catch(e){
-      if (warn) {
-        warn.style.display='block';
-        warn.textContent = 'Settings not saved (missing plan_settings table or RLS). Run the SQL stub in the file.';
-      }
-    }
-    updateTimingHealth();
+    if (!warn) return;
+    warn.style.display = 'block';
+    warn.textContent = msg || 'Settings are not saving yet.';
   }
 
-  function minutesDiff(aIso, bIso){
+  function hideSettingsError(){
+    const warn = document.getElementById('settingsWarn');
+    if (!warn) return;
+    warn.style.display = 'none';
+  }
+
+
+  function setSettingsStatus(text){
+    const el = document.getElementById('settingsStatus');
+    if (el) el.textContent = text || '';
+  }
+
+  function markSettingsDirty(){
+    const btn = document.getElementById('saveSettingsBtn');
+    if (btn) btn.disabled = false;
+    setSettingsStatus('Unsaved changes');
+  }
+  async function savePlanSettings(){
+  if (!activePlan?.id) return;
+
+  const btn = document.getElementById('saveSettingsBtn');
+  if (btn) btn.disabled = true;
+  setSettingsStatus('Saving...');
+
+  const floatRaw = (document.getElementById('floatHours')?.value ?? '').trim();
+  const floatHours = Number.isFinite(Number(floatRaw)) ? Number(floatRaw) : 0;
+
+  const payload = {
+    plan_id: activePlan.id,
+    float_hours: floatHours,
+    tpic_name: (document.getElementById('tpicName')?.value ?? '').trim() || null,
+    tpic_phone: (document.getElementById('tpicPhone')?.value ?? '').trim() || null,
+    mmic_name: (document.getElementById('mmicName')?.value ?? '').trim() || null,
+    mmic_phone: (document.getElementById('mmicPhone')?.value ?? '').trim() || null,
+    updated_at: new Date().toISOString()
+  };
+
+  const { error } = await supabaseClient
+    .from('plan_settings')
+    .upsert(payload, { onConflict: 'plan_id' });
+
+  if (error) {
+    console.error('plan_settings upsert failed:', error, payload);
+    showSettingsError(error.message);
+    setSettingsStatus('Save failed');
+    if (btn) btn.disabled = false;
+    return;
+  }
+
+  hideSettingsError();
+  setSettingsStatus('Saved');
+  if (btn) btn.disabled = true;
+
+  // refresh cache + health line
+  settingsCache[activePlan.id] = payload;
+  updateTimingHealth();
+}
+
+function minutesDiff(aIso, bIso){
     if (!aIso || !bIso) return null;
     const a = new Date(aIso).getTime();
     const b = new Date(bIso).getTime();
@@ -650,13 +702,13 @@
       ? `${last} min down against timings with float of ${floatMin}m (${Math.max(0,remaining)}m remaining)`
       : `${Math.abs(last)} min up against timings with float of ${floatMin}m`;
 
-    const maxAbs = Math.max(10, ...completedSeries.map(v => Math.abs(v)));
-const w = 280, h = 56, pad = 6;
-const xStep = completedSeries.length > 1
-  ? (w - 2 * pad) / (completedSeries.length - 1)
-  : 0;
-const yMid = h / 2;
-const yScale = (h / 2 - pad) / maxAbs;
+    const rawMaxAbs = Math.max(5, ...completedSeries.map(v => Math.abs(v)));
+    const maxAbs = Math.min(120, rawMaxAbs); // cap so the line doesn't go flat
+    const w=280, h=56, pad=6;
+    const xStep = completedSeries.length>1 ? (w-2*pad)/(completedSeries.length-1) : 0;
+    const yMid = h/2;
+    const exaggeration = 1.0; // standard scale (stable layout)
+    const yScale = (h/2 - pad) / (maxAbs * exaggeration);
     const pts = completedSeries.map((v,i)=>{
       const x = pad + i*xStep;
       const y = yMid + (v * yScale);
@@ -949,17 +1001,35 @@ let activePlan = null;
   function fmtDT(iso) {
     if (!iso) return '';
     const d = new Date(iso);
-    return d.toLocaleString(undefined, {
+    // Stable, predictable display across platforms (UK format, 24h)
+    return new Intl.DateTimeFormat('en-GB', {
       year: 'numeric', month: '2-digit', day: '2-digit',
-      hour: '2-digit', minute: '2-digit'
-    });
+      hour: '2-digit', minute: '2-digit', hour12: false
+    }).format(d);
   }
 
-  function toLocalInputValue(iso) {
+  function pad2(n){ return String(n).padStart(2,'0'); }
+
+  function isoToLocalInputValue(iso) {
     if (!iso) return '';
     const d = new Date(iso);
-    const pad = n => String(n).padStart(2,'0');
-    return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+    return `${d.getFullYear()}-${pad2(d.getMonth()+1)}-${pad2(d.getDate())}T${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+  }
+
+  // Safari-safe parse for <input type="datetime-local"> value (YYYY-MM-DDTHH:MM)
+  function parseDateTimeLocal(value){
+    if (!value) return null;
+    const parts = String(value).split('T');
+    if (parts.length !== 2) return null;
+    const [y,m,d] = parts[0].split('-').map(Number);
+    const [hh,mm] = parts[1].split(':').map(Number);
+    if (![y,m,d,hh,mm].every(Number.isFinite)) return null;
+    return new Date(y, m-1, d, hh, mm, 0, 0);
+  }
+
+  function datetimeLocalToIso(value){
+    const dt = parseDateTimeLocal(value);
+    return dt ? dt.toISOString() : null;
   }
 
   function minutesBetween(aIso, bIso) {
@@ -1355,7 +1425,7 @@ let activePlan = null;
         </div>
         <div>
           ${rightTop}
-          <input type="datetime-local" ${(isDone||t.is_na) ? 'disabled' : ''} value="${toLocalInputValue(t.predicted_time)}" onchange="setPredictedTime('${t.id}', this.value)" />
+          <input type="datetime-local" ${(isDone||t.is_na) ? 'disabled' : ''} value="${isoToLocalInputValue(t.predicted_time)}" onchange="setPredictedTime('${t.id}', this.value)" />
           <div style="margin-top:.5rem;">
             <button class="complete ${isDone ? 'done' : ''}" ${(isDone||t.is_na) ? 'disabled' : ''} onclick="completeTask('${t.id}')">${isDone ? '✓ Done' : 'Complete'}</button>
           </div>
@@ -1370,7 +1440,9 @@ let activePlan = null;
 
   async function setPredictedTime(taskId, localValue) {
     if (!activePlan) return;
-    const iso = localValue ? new Date(localValue).toISOString() : null;
+
+    // IMPORTANT: do NOT use new Date(localValue) here. iOS Safari parses it unreliably.
+    const iso = localValue ? datetimeLocalToIso(localValue) : null;
 
     const { error } = await supabaseClient
       .from('tasks')
