@@ -450,7 +450,7 @@
   <div class="right">
     <button class="btn-ghost" id="btnViewOpen" onclick="setView('open')">Open</button>
     <button class="btn-ghost" id="btnViewMemory" onclick="setView('memory')">Memory</button>
-    <button class="btn" onclick="refreshAll()">Refresh</button>
+    <button class="btn" onclick="refreshAll()">Refresh</button><button id="publishBtn" class="btn btn-secondary" style="margin-left:8px">Publish</button>
     <button class="btn-primary" onclick="createPlanPrompt()">New Plan</button>
     <button class="btn-danger" onclick="closePlan()">Close Incident</button>
   </div>
@@ -2734,5 +2734,57 @@ function renderTasks() {
   loadPlans().then(async () => { if (activePlan) { await loadEverythingForActivePlan(); await loadPlanSettings(); await startViewerPresence(); } });
 </script>
 
+
+<script>
+document.getElementById('publishBtn')?.addEventListener('click', async () => {
+  try {
+    if (!window.currentPlan || !window.currentTasks) {
+      alert('No plan loaded');
+      return;
+    }
+
+    const lines = [];
+    lines.push(`📋 ${currentPlan.title || 'Milestone Plan'}`);
+    if (currentPlan.description) lines.push(currentPlan.description);
+    lines.push('');
+
+    if (window.planSettings) {
+      const s = planSettings;
+      if (s.fms_ref || s.ccil_ref || s.tda_ref) {
+        lines.push(`Refs: ${s.fms_ref || '-'} | ${s.ccil_ref || '-'} | ${s.tda_ref || '-'}`);
+      }
+      if (s.tpic_name || s.tpic_phone) {
+        lines.push(`TPIC: ${s.tpic_name || '-'} ${s.tpic_phone || ''}`);
+      }
+      if (s.mmic_name || s.mmic_phone) {
+        lines.push(`MMIC: ${s.mmic_name || '-'} ${s.mmic_phone || ''}`);
+      }
+      if (s.float_hours) {
+        lines.push(`Time float: ${s.float_hours}h`);
+      }
+      lines.push('');
+    }
+
+    lines.push('Milestones:');
+    currentTasks
+      .sort((a,b) => a.display_order - b.display_order)
+      .forEach(t => {
+        const pred = t.predicted_at ? new Date(t.predicted_at).toLocaleString() : '—';
+        const done = t.completed_at ? new Date(t.completed_at).toLocaleString() : null;
+        let line = `${t.display_label || t.display_order}. ${t.title} (Pred: ${pred})`;
+        if (done) line += ` ✔ Done ${done}`;
+        if (t.branch_name) line += ` [Branch: ${t.branch_name}]`;
+        lines.push(line);
+      });
+
+    await navigator.clipboard.writeText(lines.join('\n'));
+    alert('Milestone plan copied to clipboard');
+  } catch (e) {
+    console.error(e);
+    alert('Publish failed');
+  }
+});
+</script>
 </body>
+
 </html>
