@@ -2738,53 +2738,106 @@ function renderTasks() {
 <script>
 document.getElementById('publishBtn')?.addEventListener('click', async () => {
   try {
-    if (!window.currentPlan || !window.currentTasks) {
+    // Use the app's real state variables
+    if (!window.activePlan || !Array.isArray(window.tasksCache)) {
       alert('No plan loaded');
       return;
     }
 
+    const plan = window.activePlan;
+    const tasks = window.tasksCache || [];
+    const settings = (window.settingsCache && window.settingsCache[plan.id]) ? window.settingsCache[plan.id] : {};
+
     const lines = [];
-    lines.push(`📋 ${currentPlan.title || 'Milestone Plan'}`);
-    if (currentPlan.description) lines.push(currentPlan.description);
+    lines.push(`📋 ${plan.title || 'Milestone Plan'}`);
+    if (plan.description) lines.push(plan.description);
     lines.push('');
 
-    if (window.planSettings) {
-      const s = planSettings;
-      if (s.fms_ref || s.ccil_ref || s.tda_ref) {
-        lines.push(`Refs: ${s.fms_ref || '-'} | ${s.ccil_ref || '-'} | ${s.tda_ref || '-'}`);
-      }
-      if (s.tpic_name || s.tpic_phone) {
-        lines.push(`TPIC: ${s.tpic_name || '-'} ${s.tpic_phone || ''}`);
-      }
-      if (s.mmic_name || s.mmic_phone) {
-        lines.push(`MMIC: ${s.mmic_name || '-'} ${s.mmic_phone || ''}`);
-      }
-      if (s.float_hours) {
-        lines.push(`Time float: ${s.float_hours}h`);
-      }
-      lines.push('');
+    // Refs (now on left panel in your UI)
+    const fms = settings.fms_ref || '';
+    const ccil = settings.ccil_ref || '';
+    const tda = settings.tda_ref || '';
+    if (fms || ccil || tda) {
+      lines.push(`Refs: FMS ${fms || '-'} | CCIL ${ccil || '-'} | TDA ${tda || '-'}`);
     }
 
-    lines.push('Milestones:');
-    currentTasks
-      .sort((a,b) => a.display_order - b.display_order)
-      .forEach(t => {
-        const pred = t.predicted_at ? new Date(t.predicted_at).toLocaleString() : '—';
-        const done = t.completed_at ? new Date(t.completed_at).toLocaleString() : null;
-        let line = `${t.display_label || t.display_order}. ${t.title} (Pred: ${pred})`;
-        if (done) line += ` ✔ Done ${done}`;
-        if (t.branch_name) line += ` [Branch: ${t.branch_name}]`;
-        lines.push(line);
-      });
+    // Command structure
+    const tpicLine = [settings.tpic_name || '', settings.tpic_phone || ''].filter(Boolean).join(' / ');
+    const mmicLine = [settings.mmic_name || '', settings.mmic_phone || ''].filter(Boolean).join(' / ');
+    if (tpicLine) lines.push(`TPIC: ${tpicLine}`);
+    if (mmicLine) lines.push(`MMIC: ${mmicLine}`);
 
-    await navigator.clipboard.writeText(lines.join('\n'));
+    // Float
+    if (settings.float_hours != null && String(settings.float_hours).trim() !== '') {
+      lines.push(`Time float: ${settings.float_hours}h`);
+    }
+
+    lines.push('');
+
+    // Progress (mainline only, per your semantics)
+    const mainTasks = tasks.filter(t => !t.branch_name);
+    const mainDone = mainTasks.filter(t => t.completed_at && !t.is_na).length;
+    const mainCount = mainTasks.filter(t => !t.is_na).length;
+    if (mainCount > 0) lines.push(`Progress: ${Math.round((mainDone/mainCount)*100)}% (${mainDone}/${mainCount})`);
+    lines.push('');
+
+    // Milestones in display order
+    lines.push('Milestones:');
+
+    const ordered = [...tasks].sort((a,b) => (a.display_order ?? 0) - (b.display_order ?? 0));
+
+    const fmt = (iso) => iso ? new Date(iso).toLocaleString() : '—';
+
+    ordered.forEach(t => {
+      const label = t.display_label || t.display_order || '';
+      const pred = fmt(t.predicted_at);
+      const done = t.completed_at ? fmt(t.completed_at) : null;
+
+      let line = `${label}. ${t.title || '(untitled)'} (Pred: ${pred})`;
+      if (t.is_na) line += ` [N/A]`;
+      if (done) {
+        line += ` ✔ Done ${done}`;
+        if (t.predicted_at) {
+          const deltaMin = Math.round((new Date(t.completed_at) - new Date(t.predicted_at)) / 60000);
+          if (!Number.isNaN(deltaMin)) {
+            line += deltaMin <= 0 ? ` (${Math.abs(deltaMin)}m early)` : ` (${deltaMin}m late)`;
+          }
+        }
+      }
+      if (t.branch_name) line += ` [Branch: ${t.branch_name}]`;
+      lines.push(line);
+    });
+
+    const text = lines.join('\n');
+
+    // Clipboard copy: modern + iOS fallback
+    const copyViaExecCommand = () => {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '-1000px';
+      document.body.appendChild(ta);
+      ta.select();
+      ta.setSelectionRange(0, ta.value.length);
+      const ok = document.execCommand('copy');
+      document.body.removeChild(ta);
+      return ok;
+    };
+
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      await navigator.clipboard.writeText(text);
+    } else {
+      const ok = copyViaExecCommand();
+      if (!ok) throw new Error('Clipboard copy failed');
+    }
+
     alert('Milestone plan copied to clipboard');
   } catch (e) {
     console.error(e);
     alert('Publish failed');
   }
-});
-</script>
+});</script>
 </body>
 
 </html>
