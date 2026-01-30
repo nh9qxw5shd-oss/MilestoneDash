@@ -2707,15 +2707,148 @@ function renderTasks() {
 
 
 <script>
+
 document.getElementById('publishBtn')?.addEventListener('click', async () => {
   try {
-    // Use the app's real state variables (works on iOS Safari too)
-    const plan = (typeof activePlan !== 'undefined' && activePlan) ? activePlan : (window.activePlan || null);
-    const tasks = (typeof tasksCache !== 'undefined' && Array.isArray(tasksCache)) ? tasksCache : (Array.isArray(window.tasksCache) ? window.tasksCache : []);
-    const settings = (typeof settingsCache !== 'undefined' && settingsCache) ? (settingsCache[plan?.id] || settingsCache || {}) :
-                     (window.settingsCache && plan && window.settingsCache[plan.id]) ? window.settingsCache[plan.id] : (window.settingsCache || {});
+    // Pull from whichever state vars actually exist in this version
+    const plan =
+      (typeof activePlan !== 'undefined' && activePlan) ? activePlan :
+      (window.activePlan || window.currentPlan || null);
 
-    if (!plan || !tasks) {
+    const tasks =
+      (typeof tasksCache !== 'undefined' && Array.isArray(tasksCache)) ? tasksCache :
+      (Array.isArray(window.tasksCache) ? window.tasksCache :
+      (Array.isArray(window.currentTasks) ? window.currentTasks : []));
+
+    const settings =
+      (typeof settingsCache !== 'undefined' && settingsCache && plan) ? (settingsCache[plan.id] || {}) :
+      (window.settingsCache && plan && window.settingsCache[plan.id]) ? window.settingsCache[plan.id] :
+      (window.planSettings || {});
+
+    if (!plan) {
+      alert('No plan loaded');
+      return;
+    }
+
+    // ---- helpers ----
+    const pad2 = (n) => String(n).padStart(2,'0');
+    const int = (x) => Number.parseInt(x,10);
+
+    function parseUKDateTime(s){
+      // accepts "dd/mm/yyyy, hh:mm" or "dd/mm/yyyy hh:mm"
+      if (!s || typeof s !== 'string') return null;
+      const mm = s.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})(?:,?\s+)?(\d{1,2}):(\d{2})/);
+      if (!mm) return null;
+      const d = int(mm[1]); const mo = int(mm[2]); const y = int(mm[3]);
+      const hh = int(mm[4]); const mi = int(mm[5]);
+      return new Date(y, mo-1, d, hh, mi, 0, 0);
+    }
+
+    function toDate(v){
+      if (!v) return null;
+      if (v instanceof Date) return v;
+      if (typeof v === 'number') return new Date(v);
+      if (typeof v === 'string'){
+        const isoTry = new Date(v);
+        if (!Number.isNaN(isoTry.getTime())) return isoTry;
+        const uk = parseUKDateTime(v);
+        if (uk && !Number.isNaN(uk.getTime())) return uk;
+      }
+      return null;
+    }
+
+    function fmt(v){
+      const d = toDate(v);
+      if (!d) return '—';
+      return `${pad2(d.getDate())}/${pad2(d.getMonth()+1)}/${d.getFullYear()} ${pad2(d.getHours())}:${pad2(d.getMinutes())}`;
+    }
+
+    function getPred(t){
+      return (t.predicted_time ?? t.predicted_at ?? t.predicted ?? t.predicted_completion ?? t.predicted_datetime ?? t.predictedAt ?? null);
+    }
+    function getDone(t){
+      return (t.completed_at ?? t.completed_time ?? t.done_at ?? t.doneAt ?? t.completedAt ?? null);
+    }
+    function getNum(t){
+      const lbl = (t.display_label || t.task_label || t.label || '').toString();
+      if (/^B\d+-\d+$/i.test(lbl)){
+        const mm = lbl.match(/^B(\d+)-(\d+)$/i);
+        return 100000 + (int(mm[1]) * 100) + int(mm[2]);
+      }
+      const n = Number(t.task_number ?? t.task_no ?? t.display_order ?? t.order ?? t.seq ?? NaN);
+      if (!Number.isNaN(n)) return n;
+      if (/^\d+$/.test(lbl)) return int(lbl);
+      return 999999;
+    }
+
+    // ---- build text ----
+    const lines = [];
+    lines.push(`📋 ${plan.title || 'Milestone Plan'}`);
+    if (plan.description) lines.push(plan.description);
+    lines.push(`Published: ${fmt(new Date())}`);
+    lines.push('');
+
+    const fms = settings.fms_ref || settings.fms || '';
+    const ccil = settings.ccil_ref || settings.ccil || '';
+    const tda = settings.tda_ref || settings.tda || '';
+    if (fms || ccil || tda){
+      lines.push(`Refs: FMS ${fms || '-'} | CCIL ${ccil || '-'} | TDA ${tda || '-'}`);
+    }
+
+    const tpicName = settings.tpic_name || settings.tpic || '';
+    const tpicPhone = settings.tpic_phone || '';
+    const mmicName = settings.mmic_name || settings.mmic || '';
+    const mmicPhone = settings.mmic_phone || '';
+    if (tpicName || tpicPhone) lines.push(`TPIC: ${tpicName || '-'} ${tpicPhone || ''}`.trim());
+    if (mmicName || mmicPhone) lines.push(`MMIC: ${mmicName || '-'} ${mmicPhone || ''}`.trim());
+
+    lines.push('');
+
+    const sorted = (tasks || []).slice().sort((a,b) => getNum(a) - getNum(b));
+
+    lines.push(`Progress: ${sorted.filter(t => !!getDone(t)).length}/${sorted.length}`);
+    lines.push('Milestones:');
+
+    sorted.forEach(t => {
+      const title = (t.title || t.name || '(untitled)').toString().trim();
+      const pred = fmt(getPred(t));
+      const done = getDone(t) ? fmt(getDone(t)) : '';
+      const display = (t.display_label || t.task_label || t.label || t.task_number || '').toString().trim();
+      const prefix = display ? `${display}. ` : '• ';
+
+      let line = `${prefix}${title} (Pred: ${pred})`;
+      if (done) line += ` ✔ Done ${done}`;
+
+      const bname = t.branch_name || t.branch || t.branchLabel || '';
+      if (bname) line += ` [Branch: ${bname}]`;
+
+      lines.push(line);
+    });
+
+    const out = lines.join('\n');
+
+    try {
+      await navigator.clipboard.writeText(out);
+    } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = out;
+      ta.setAttribute('readonly','');
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      ta.style.top = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand('copy');
+      document.body.removeChild(ta);
+    }
+
+    alert('Copied to clipboard');
+  } catch (e) {
+    console.error(e);
+    alert('Publish failed');
+  }
+});
+if (!plan || !tasks) {
       alert('No plan loaded');
       return;
     }
