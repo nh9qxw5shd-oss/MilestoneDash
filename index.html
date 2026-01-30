@@ -2709,15 +2709,16 @@ function renderTasks() {
 <script>
 document.getElementById('publishBtn')?.addEventListener('click', async () => {
   try {
-    // Use the app's real state variables
-    if (!window.activePlan || !Array.isArray(window.tasksCache)) {
+    // Use the app's real state variables (works on iOS Safari too)
+    const plan = (typeof activePlan !== 'undefined' && activePlan) ? activePlan : (window.activePlan || null);
+    const tasks = (typeof tasksCache !== 'undefined' && Array.isArray(tasksCache)) ? tasksCache : (Array.isArray(window.tasksCache) ? window.tasksCache : []);
+    const settings = (typeof settingsCache !== 'undefined' && settingsCache) ? (settingsCache[plan?.id] || settingsCache || {}) :
+                     (window.settingsCache && plan && window.settingsCache[plan.id]) ? window.settingsCache[plan.id] : (window.settingsCache || {});
+
+    if (!plan || !tasks) {
       alert('No plan loaded');
       return;
     }
-
-    const plan = window.activePlan;
-    const tasks = window.tasksCache || [];
-    const settings = (window.settingsCache && window.settingsCache[plan.id]) ? window.settingsCache[plan.id] : {};
 
     const lines = [];
     lines.push(`📋 ${plan.title || 'Milestone Plan'}`);
