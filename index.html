@@ -478,9 +478,7 @@
 
         <div class="settingsGrid">
           <div class="setting">
-            <label>Time float (hours)</label>
-            <input id="floatHours" type="number" min="0" step="0.25" value="0" oninput="markSettingsDirty()" />
-            <div class="refsGrid">
+<div class="refsGrid">
               <div class="field">
                 <label class="fieldLbl">FMS ref</label>
                 <input id="fmsRef" type="text" placeholder="e.g. FMS123456" oninput="markSettingsDirty()" />
@@ -657,9 +655,7 @@
   let saveTimer = null;
 
   function getSettingsInputs(){
-    return {
-      float_hours: Number(document.getElementById('floatHours')?.value || 0),
-      tpic_name: (document.getElementById('tpicName')?.value || '').trim(),
+    return {      tpic_name: (document.getElementById('tpicName')?.value || '').trim(),
       tpic_phone: (document.getElementById('tpicPhone')?.value || '').trim(),
       mmic_name: (document.getElementById('mmicName')?.value || '').trim(),
       mmic_phone: (document.getElementById('mmicPhone')?.value || '').trim(),
@@ -671,8 +667,6 @@
 
   function applySettingsToUI(s){
     if (!s) s = {};
-    const fh = document.getElementById('floatHours');
-    if (fh) fh.value = String((Number(s.float_hours||0) || (Number(s.float_minutes||0)/60) || 0));
     const tn = document.getElementById('tpicName'); if (tn) tn.value = s.tpic_name || '';
     const tp = document.getElementById('tpicPhone'); if (tp) tp.value = s.tpic_phone || '';
     const mn = document.getElementById('mmicName'); if (mn) mn.value = s.mmic_name || '';
@@ -748,13 +742,8 @@
   if (btn) btn.disabled = true;
   setSettingsStatus('Saving...');
 
-  const floatRaw = (document.getElementById('floatHours')?.value ?? '').trim();
-  const floatHours = Number.isFinite(Number(floatRaw)) ? Number(floatRaw) : 0;
-
   const payload = {
-    plan_id: activePlan.id,
-    float_hours: floatHours,
-    tpic_name: (document.getElementById('tpicName')?.value ?? '').trim() || null,
+    plan_id: activePlan.id,    tpic_name: (document.getElementById('tpicName')?.value ?? '').trim() || null,
     tpic_phone: (document.getElementById('tpicPhone')?.value ?? '').trim() || null,
     mmic_name: (document.getElementById('mmicName')?.value ?? '').trim() || null,
     mmic_phone: (document.getElementById('mmicPhone')?.value ?? '').trim() || null,
@@ -835,17 +824,11 @@ function minutesDiff(aIso, bIso){
     const detailLine = document.getElementById('timingDetailLine');
     if (!line || !ragLine || !detailLine) return;
     if (!activePlan){
-      line.textContent = 'Set a float to calculate health.';
+      line.textContent = 'No completed milestones with predictions yet.';
       ragLine.textContent = 'No timing status yet.';
       detailLine.textContent = '';
       return;
     }
-
-    const settings = settingsCache[activePlan.id] || { float_hours: 0, float_minutes: 0 };
-    const floatMin = (settings.float_hours != null)
-      ? Math.round(Number(settings.float_hours || 0) * 60)
-      : Number(settings.float_minutes || 0);
-
     const trackable = getTrackableTaskIds();
 
     // Completed tasks with predictions (in task order)
@@ -854,7 +837,7 @@ function minutesDiff(aIso, bIso){
       .sort((a,b) => (Number(a.task_number||0)) - (Number(b.task_number||0)));
 
     if (!completedPred.length){
-      line.textContent = floatMin ? `No completed milestones with predictions yet. Float set: ${floatMin}m.` : 'Set a float to calculate health.';
+      line.textContent = 'No completed milestones with predictions yet.';
       ragLine.textContent = 'No timing status yet.';
       detailLine.textContent = '';
       const fill = document.getElementById('progFill');
@@ -885,24 +868,12 @@ function minutesDiff(aIso, bIso){
     // Last checkpoint (always shown once)
     const checkpointText = `Last checkpoint: ${getTaskDisplayNumber(lastTask)} completed ${fmtDT(lastTask.completed_at)}.`;
     line.textContent = checkpointText;
-
-    // Float narrative (optional)
-    if (!floatMin){
-      detailLine.textContent = '';
-    } else {
-      const remaining = (last > 0) ? (floatMin - last) : floatMin;
-      detailLine.textContent = (last > 0)
-        ? `${last} min down against timings with float of ${floatMin}m (${Math.max(0,remaining)}m remaining)`
-        : `${abs} min up against timings with float of ${floatMin}m`;
-    }
-
-    // Progress semantics colour based on float health
+    // Progress semantics colour based on last checkpoint
     const fill = document.getElementById('progFill');
     if (fill) {
       fill.classList.remove('good','amber','bad');
-      if (!floatMin) fill.classList.add('good');
-      else if (last > 0 && (floatMin - last) < 0) fill.classList.add('bad');
-      else if (last > 0 && (floatMin - last) <= 10) fill.classList.add('amber');
+      if (last > 10) fill.classList.add('bad');
+      else if (last > 0) fill.classList.add('amber');
       else fill.classList.add('good');
     }
   }
