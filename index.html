@@ -377,6 +377,15 @@
       flex: 1;
     }
 
+
+    .durSelect{
+      padding: .45rem .55rem;
+      border-radius: .6rem;
+      border: 1px solid #d1d5db;
+      font: inherit;
+      width: 220px;
+      background: #fff;
+    }
     .memList {
       display: grid;
       gap: .5rem;
@@ -441,6 +450,21 @@
   .refsGrid{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.5rem;margin:.55rem 0 .55rem 0;}
   @media(max-width:900px){.refsGrid{grid-template-columns:1fr;}}
 
+
+/* --- System Modal (replaces browser prompt/confirm) --- */
+.modalBack{position:fixed;inset:0;background:rgba(10,12,16,.55);display:flex;align-items:center;justify-content:center;padding:16px;z-index:9999}
+.modalCard{background:var(--card,#fff);color:var(--txt,#0f172a);max-width:560px;width:100%;border-radius:18px;box-shadow:0 18px 60px rgba(0,0,0,.28);overflow:hidden}
+.modalHeader{padding:14px 16px;border-bottom:1px solid rgba(15,23,42,.10);font-weight:800}
+.modalBody{padding:16px;display:flex;flex-direction:column;gap:10px}
+.modalFooter{padding:12px 16px;border-top:1px solid rgba(15,23,42,.10);display:flex;gap:8px;justify-content:flex-end;flex-wrap:wrap}
+.modalOptionGrid{display:grid;grid-template-columns:1fr;gap:10px}
+.modalOptionBtn{width:100%;text-align:left;padding:12px 12px;border-radius:14px;border:1px solid rgba(15,23,42,.12);background:rgba(255,255,255,.75);cursor:pointer}
+.modalOptionBtn:hover{background:rgba(15,23,42,.04)}
+.modalOptionBtn .t{font-weight:800}
+.modalOptionBtn .s{font-size:12px;opacity:.75;margin-top:2px}
+.modalInput{width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(15,23,42,.16);outline:none}
+.modalInput:focus{border-color:rgba(59,130,246,.75);box-shadow:0 0 0 3px rgba(59,130,246,.18)}
+
 </style>
 </head>
 <body>
@@ -480,6 +504,10 @@
           <div class="setting">
 <div class="refsGrid">
               <div class="field">
+                <label class="fieldLbl">Start time</label>
+                <input id="startTime" type="datetime-local" oninput="markSettingsDirty()" />
+              </div>
+              <div class="field">
                 <label class="fieldLbl">FMS ref</label>
                 <input id="fmsRef" type="text" placeholder="e.g. FMS123456" oninput="markSettingsDirty()" />
               </div>
@@ -492,7 +520,7 @@
                 <input id="tdaRef" type="text" placeholder="e.g. TDA-0000" oninput="markSettingsDirty()" />
               </div>
             </div>
-            <div class="muted" id="timingHealthLine">Set a float to calculate health.</div>
+            <div class="muted" id="timingHealthLine">Set a start time + durations to auto-calculate predictions.</div>
             <div class="muted" id="timingRagLine" style="margin-top:.35rem;font-weight:900;">No timing status yet.</div>
             <div class="muted" id="timingDetailLine" style="margin-top:.2rem;"></div>
           </div>
@@ -674,6 +702,7 @@
     const fr = document.getElementById('fmsRef'); if (fr) fr.value = s.fms_ref || '';
     const cr = document.getElementById('ccilRef'); if (cr) cr.value = s.ccil_ref || '';
     const tr = document.getElementById('tdaRef'); if (tr) tr.value = s.tda_ref || '';
+    const st = document.getElementById('startTime'); if (st) st.value = isoToLocalInputValue(s.start_time);
   }
 
   async function loadPlanSettings(){
@@ -692,10 +721,10 @@
         .eq("plan_id", activePlan.id)
         .maybeSingle();
       if (error) throw error;
-      settingsCache[activePlan.id] = data || { plan_id: activePlan.id, float_hours: 0 };
+      settingsCache[activePlan.id] = data || { plan_id: activePlan.id, start_time: null };
       applySettingsToUI(settingsCache[activePlan.id]);
     } catch(e){
-      settingsCache[activePlan.id] = settingsCache[activePlan.id] || { plan_id: activePlan.id, float_hours: 0 };
+      settingsCache[activePlan.id] = settingsCache[activePlan.id] || { plan_id: activePlan.id, start_time: null };
       applySettingsToUI(settingsCache[activePlan.id]);
       if (warn) {
         warn.style.display = "block";
@@ -750,6 +779,7 @@
     fms_ref: (document.getElementById('fmsRef')?.value ?? '').trim() || null,
     ccil_ref: (document.getElementById('ccilRef')?.value ?? '').trim() || null,
     tda_ref: (document.getElementById('tdaRef')?.value ?? '').trim() || null,
+    start_time: (document.getElementById('startTime')?.value ? datetimeLocalToIso(document.getElementById('startTime').value) : null),
     updated_at: new Date().toISOString()
   };
 
@@ -772,7 +802,10 @@
   // refresh cache + health line
   settingsCache[activePlan.id] = payload;
   updateTimingHealth();
+  // Force a full refresh so UI rehydrates from Supabase
+  setTimeout(() => window.location.reload(), 250);
 }
+
 
 function minutesDiff(aIso, bIso){
     if (!aIso || !bIso) return null;
@@ -1546,12 +1579,15 @@ function renderBranchTogglesForOrigin(originTaskId) {
     recomputeBranchCache();
     await loadBranchStates();
     await loadSubtasks();
+    await loadPlanSettings();
+
+    // Compute predicted times from Start time + Expected durations
+    await recomputePredictedTimes(false);
+
     renderTasks();
     updateProgressBar();
     updateTimingHealth();
-    await loadPlanSettings();
     await startViewerPresence();
-
   }
 
   async function loadTasks() {
@@ -1665,9 +1701,9 @@ function renderTasks() {
         ? `Completed: ${fmtDT(t.completed_at)}`
         : (hasPred ? `Predicted: ${fmtDT(t.predicted_time)}` : 'Predicted: (not set)');
 
-      const rightTop = `<div class="muted" style="font-size:.85rem; margin-bottom:.25rem;">Predicted completion</div>`;
+      const rightTop = ``;
 
-      const subList = (subtasksCache[t.id] || []);
+      const subList = (subtasksCache && Array.isArray(subtasksCache[t.id])) ? subtasksCache[t.id] : [];
       const subHtml = `
         <div class="subtasks">
           <div class="controls" style="justify-content:space-between; align-items:center;">
@@ -1717,7 +1753,13 @@ function renderTasks() {
         </div>
         <div class="rightCol">
           ${rightTop}
-          <input type="datetime-local" ${(isDone||t.is_na) ? 'disabled' : ''} value="${isoToLocalInputValue(t.predicted_time)}" onchange="setPredictedTime('${t.id}', this.value)" />
+          <div class="durWrap">
+            <div class="muted" style="font-size:.85rem; margin-top:-.1rem;">Expected duration (mins)</div>
+            <select class="durSelect" ${(isDone||t.is_na) ? 'disabled' : ''} onchange="onDurationSelectChange('${t.id}', this)">
+              ${renderDurationOptions(t.expected_minutes)}
+            </select>
+            <div class="muted" style="font-size:.85rem; margin-top:.25rem;">Predicted: ${hasPred ? fmtDT(t.predicted_time) : '—'}</div>
+          </div>
           <div style="margin-top:.5rem;">
             <button class="complete ${isDone ? 'done' : ''}" ${(t.is_na) ? 'disabled' : ''} onclick="toggleTaskComplete('${t.id}')">${isDone ? '✓ Done (undo)' : 'Complete'}</button>
           </div>
@@ -1730,94 +1772,352 @@ function renderTasks() {
 
   }
 
-  async function setPredictedTime(taskId, localValue) {
-    if (!activePlan) return;
+    
+    function renderDurationOptions(current){
+      const step = 10;
+      const max = 720; // 12h in 10-min steps
+      const cur = (current === null || typeof current === 'undefined' || current === '') ? null : (parseInt(current,10) || 0);
+      const inGrid = (cur !== null && cur % step === 0 && cur >= 0 && cur <= max);
 
-    // IMPORTANT: do NOT use new Date(localValue) here. iOS Safari parses it unreliably.
-    const iso = localValue ? datetimeLocalToIso(localValue) : null;
+      let opts = '';
+      // blank option
+      opts += `<option value="" ${cur===null ? 'selected' : ''}>—</option>`;
+
+      // preserve non-10-min values (legacy / custom)
+      if (cur !== null && !inGrid) {
+        opts += `<option value="${cur}" selected>${cur} mins (custom)</option>`;
+      }
+
+      for (let v=0; v<=max; v+=step){
+        const label = (v < 60) ? `${v} mins` : `${Math.floor(v/60)}h ${String(v%60).padStart(2,'0')}m`;
+        opts += `<option value="${v}" ${(inGrid && v===cur) ? 'selected' : ''}>${label}</option>`;
+      }
+
+      opts += `<option value="__custom__">Custom…</option>`;
+      return opts;
+    }
+
+    async function onDurationSelectChange(taskId, sel){
+      if (!sel) return;
+      if (sel.value === '__custom__'){
+        const raw = prompt('Enter expected duration in minutes (e.g. 75):', '');
+        if (raw === null) { await loadEverythingForActivePlan(); return; }
+        const mins = Math.max(0, parseInt(String(raw).trim(), 10) || 0);
+        await setExpectedMinutes(taskId, mins);
+        await loadEverythingForActivePlan();
+        return;
+      }
+      await setExpectedMinutes(taskId, sel.value);
+      await loadEverythingForActivePlan();
+    }
+
+async function setExpectedMinutes(taskId, val){
+    if (!activePlan) return;
+    const mins = (val === '' || val === null || typeof val === 'undefined') ? null : Math.max(0, parseInt(val, 10) || 0);
 
     const { error } = await supabaseClient
       .from('tasks')
-      .update({ predicted_time: iso })
+      .update({ expected_minutes: mins })
       .eq('id', taskId);
 
     if (error) {
-      setWarning(`Failed to update predicted time: ${error.message}`);
+      setWarn(`Failed to save duration: ${error.message}`);
+      console.error(error);
       return;
     }
 
-    await loadTasks();
-    persistCollapsedBranchGroups();
-    renderTasks();
-    updateProgressBar();
-    updateTimingHealth();
+    // Update cache
+    const t = (tasksCache || []).find(x => x.id === taskId);
+    if (t) t.expected_minutes = mins;
+
+    // Recompute predicted times for the plan
+    await recomputePredictedTimes(false);
+  }
+async function recomputePredictedTimes(persist = false) {
+  try {
+    // Predicted times are derived: Start time + Expected duration (mins).
+    // We do NOT rely on branchMetaCache in this build.
+    const plan = (typeof activePlan !== 'undefined' && activePlan) ? activePlan :
+                 (window.activePlan || window.currentPlan || null);
+    if (!plan) return;
+
+    const startEl = document.getElementById('planStartTime');
+    // If the input isn't present, we can still compute for UI using settings cache (if available)
+    let startVal = startEl ? startEl.value : null;
+
+    // Pull start_time from settings cache if input is empty
+    const settings =
+      (typeof settingsCache !== 'undefined' && settingsCache && settingsCache[plan.id]) ? settingsCache[plan.id] :
+      (window.settingsCache && window.settingsCache[plan.id]) ? window.settingsCache[plan.id] :
+      (window.planSettings || {});
+
+    if (!startVal && settings && settings.start_time) {
+      // settings.start_time may be ISO; put into datetime-local format for display
+      const d = new Date(settings.start_time);
+      if (!Number.isNaN(d.getTime()) && startEl) startEl.value = d.toISOString().slice(0,16);
+      startVal = startEl ? startEl.value : d.toISOString();
+    }
+
+    if (!startVal) {
+      // Final fallback: now (also write back to UI so users see it)
+      const now = new Date();
+      if (startEl) startEl.value = now.toISOString().slice(0,16);
+      startVal = startEl ? startEl.value : now.toISOString();
+    }
+
+    // datetime-local returns "YYYY-MM-DDTHH:MM"
+    const start = new Date(startVal);
+    if (Number.isNaN(start.getTime())) return;
+
+    // Tasks cache is an array in this file
+    const tasks = (typeof tasksCache !== 'undefined' && Array.isArray(tasksCache)) ? tasksCache :
+                  (Array.isArray(window.tasksCache) ? window.tasksCache : []);
+
+    // Mainline tasks only (no branch_group_id), ordered by task_number
+    const main = tasks
+      .filter(t => !t.branch_group_id)
+      .slice()
+      .sort((a,b) => (a.task_number || 0) - (b.task_number || 0));
+
+    let cursor = new Date(start);
+    for (const t of main) {
+      const mins = Number(t.expected_minutes ?? t.expected_duration_mins ?? t.expected_duration ?? 0) || 0;
+      cursor = new Date(cursor.getTime() + mins * 60_000);
+      t.predicted_time = cursor.toISOString(); // store ISO; render layer formats to UK display
+    }
+
+    // Branch tasks: derive start from origin task predicted_time where possible
+    const branchTasks = tasks.filter(t => !!t.branch_group_id);
+    if (branchTasks.length) {
+      // group by branch_group_id
+      const byGroup = new Map();
+      for (const t of branchTasks) {
+        const k = t.branch_group_id;
+        if (!byGroup.has(k)) byGroup.set(k, []);
+        byGroup.get(k).push(t);
+      }
+      byGroup.forEach(list => {
+        list.sort((a,b) => (a.branch_seq || 0) - (b.branch_seq || 0));
+        // try to find origin task number (stored elsewhere as part of branch meta in other builds)
+        // fallback: base off plan start
+        let branchCursor = new Date(start);
+        // If tasks have origin_task_number or origin_task_id on them, use it
+        const originTaskNum = list[0]?.origin_task_number;
+        const originTaskId = list[0]?.origin_task_id;
+        let origin = null;
+        if (originTaskId) origin = tasks.find(x => x.id === originTaskId);
+        if (!origin && originTaskNum) origin = main.find(x => x.task_number === originTaskNum);
+        if (origin && origin.predicted_time) {
+          const d = new Date(origin.predicted_time);
+          if (!Number.isNaN(d.getTime())) branchCursor = d;
+        }
+        for (const t of list) {
+          const mins = Number(t.expected_minutes ?? t.expected_duration_mins ?? t.expected_duration ?? 0) || 0;
+          branchCursor = new Date(branchCursor.getTime() + mins * 60_000);
+          t.predicted_time = branchCursor.toISOString();
+        }
+      });
+    }
+
+    // No persistence by default (and PostgREST columns param previously caused 400s)
+    if (persist) {
+      // intentionally disabled in this build
+    }
+
+    if (typeof renderTasks === 'function') renderTasks();
+    if (typeof updateWorkStatusLines === 'function') updateWorkStatusLines();
+  } catch (e) {
+    console.warn('recomputePredictedTimes failed', e);
+  }
+}
+window.recomputePredictedTimes = recomputePredictedTimes;
+
+
+// make callable from inline handlers
+window.recomputePredictedTimes = recomputePredictedTimes;
+
+
+// --- System modal helpers (no more browser prompt/confirm) ---
+  function _sysModalEls(){
+    const b=document.getElementById('sysModalBackdrop');
+    const t=document.getElementById('sysModalTitle');
+    const body=document.getElementById('sysModalBody');
+    const f=document.getElementById('sysModalFooter');
+    return {b,t,body,f};
   }
 
-  async function editTaskMenu(taskId) {
+  function closeSysModal(){
+    const {b,t,body,f}=_sysModalEls();
+    if(!b) return;
+    b.style.display='none';
+    b.setAttribute('aria-hidden','true');
+    t.textContent='';
+    body.innerHTML='';
+    f.innerHTML='';
+    document.body.classList.remove('modalOpen');
+  }
+
+  function openSysModal({title, bodyHtml, actions=[], allowBackdropClose=true}){
+    const {b,t,body,f}=_sysModalEls();
+    if(!b) return;
+    t.textContent=title||'';
+    body.innerHTML = bodyHtml || '';
+    f.innerHTML='';
+    actions.forEach(a=>{
+      const btn=document.createElement('button');
+      btn.className = a.className || 'btn btn-ghost';
+      btn.type='button';
+      btn.textContent=a.label||'OK';
+      btn.onclick=()=>{ try{ a.onClick && a.onClick(); } finally{} };
+      f.appendChild(btn);
+    });
+    b.style.display='flex';
+    b.setAttribute('aria-hidden','false');
+    document.body.classList.add('modalOpen');
+
+    // Backdrop click closes (unless disabled)
+    b.onclick = (e)=>{
+      if(!allowBackdropClose) return;
+      if(e.target === b) closeSysModal();
+    };
+
+    // ESC closes
+    window.onkeydown = (e)=>{
+      if(e.key === 'Escape' && b.style.display !== 'none') closeSysModal();
+    };
+  }
+
+
+  window.editTaskMenu = async function(taskId) {
+    try { closeAllActionMenus && closeAllActionMenus(); } catch(e){}
     const t = tasksCache.find(x => x.id === taskId);
     if (!t) return;
 
-    const choice = prompt('Edit task\n1 = Change title\n2 = Delete task\n3 = Reorder task (mainline only)', '1');
-    if (!choice) return;
+    const optionBody = `
+      <div class="modalOptionGrid">
+        <button class="modalOptionBtn" id="optEditTitle" type="button">
+          <div class="t">Edit title</div>
+          <div class="s">Rename this task (keeps history, numbers, branch state)</div>
+        </button>
+        <button class="modalOptionBtn" id="optReorder" type="button">
+          <div class="t">Reorder (mainline)</div>
+          <div class="s">Move this task up/down the mainline. Branch tasks stay put.</div>
+        </button>
+        <button class="modalOptionBtn" id="optDelete" type="button">
+          <div class="t">Delete task</div>
+          <div class="s">Removes this task (and its subtasks) permanently.</div>
+        </button>
+      </div>
+    `;
 
-    if (choice.trim() === '1') {
-      const title = prompt('Edit task title', t.title);
-      if (!title) return;
-      const { error } = await supabaseClient
-        .from('tasks')
-        .update({ title: title.trim() })
-        .eq('id', taskId);
-      if (error) { setWarning(`Failed to edit task: ${error.message}`); return; }
-      await loadEverythingForActivePlan();
-      return;
-    }
+    openSysModal({
+      title: `Edit: ${escapeHtml(t.title || '').slice(0, 60)}`,
+      bodyHtml: optionBody,
+      actions: [{label:'Close', className:'btn btn-ghost', onClick: closeSysModal}]
+    });
 
-    if (choice.trim() === '2') {
-      if (!confirm('Delete this task? This cannot be undone.')) return;
-      const { error } = await supabaseClient
-        .from('tasks')
-        .delete()
-        .eq('id', taskId);
-      if (error) { setWarning(`Failed to delete task: ${error.message}`); return; }
-      await loadEverythingForActivePlan();
-      return;
-    }
+    // Wire options
+    const btnTitle = document.getElementById('optEditTitle');
+    const btnReorder = document.getElementById('optReorder');
+    const btnDelete = document.getElementById('optDelete');
 
-    if (choice.trim() === '3') {
+    if (btnTitle) btnTitle.onclick = ()=>{
+      openSysModal({
+        title: 'Edit title',
+        bodyHtml: `
+          <div class="field">
+            <div class="fieldLbl">Task title</div>
+            <input class="modalInput" id="editTitleInput" value="${escapeHtml(t.title||'')}" />
+          </div>
+        `,
+        actions: [
+          {label:'Cancel', className:'btn btn-ghost', onClick: closeSysModal},
+          {label:'Save', className:'btn btn-primary', onClick: async ()=>{
+            const inp = document.getElementById('editTitleInput');
+            const title = (inp?.value || '').trim();
+            if (!title) { setWarning('Title cannot be empty.'); return; }
+            const { error } = await supabaseClient.from('tasks').update({ title }).eq('id', taskId);
+            if (error) { setWarning(`Failed to edit task: ${error.message}`); return; }
+            closeSysModal();
+            await loadEverythingForActivePlan();
+          }}
+        ]
+      });
+      setTimeout(()=>document.getElementById('editTitleInput')?.focus(), 0);
+    };
+
+    if (btnDelete) btnDelete.onclick = ()=>{
+      openSysModal({
+        title: 'Delete task',
+        bodyHtml: `<div style="opacity:.85;line-height:1.35">Delete <b>${escapeHtml(t.title||'this task')}</b>? This cannot be undone.</div>`,
+        actions: [
+          {label:'Cancel', className:'btn btn-ghost', onClick: closeSysModal},
+          {label:'Delete', className:'btn btn-danger', onClick: async ()=>{
+            const { error } = await supabaseClient.from('tasks').delete().eq('id', taskId);
+            if (error) { setWarning(`Failed to delete task: ${error.message}`); return; }
+            closeSysModal();
+            await loadEverythingForActivePlan();
+          }}
+        ]
+      });
+    };
+
+    if (btnReorder) btnReorder.onclick = ()=>{
       const isBranch = !!branchTaskMeta.get(taskId);
       if (isBranch) { setWarning('Reordering branch tasks is not supported. Reorder mainline tasks only.'); return; }
 
       const mainTasks = tasksCache
-        .filter(x => branchInfoCache.main.has(x.id) && !x.is_na)
-        .sort((a,b)=>Number(a.task_number||0)-Number(b.task_number||0));
+        .filter(x => !branchTaskMeta.get(x.id))
+        .slice()
+        .sort((a,b)=> (Number(a.task_number)||0) - (Number(b.task_number)||0));
 
       const currentPos = mainTasks.findIndex(x => x.id === taskId) + 1;
-      const newPosRaw = prompt(`Move this main task to position 1..${mainTasks.length}`, String(currentPos));
-      if (!newPosRaw) return;
-      const newPos = Math.max(1, Math.min(mainTasks.length, Number(newPosRaw)));
-      if (!Number.isFinite(newPos)) return;
+      if (!currentPos) { setWarning('Could not determine current task position.'); return; }
 
-      // Rebuild task_numbers 1..N for mainline in the new order to avoid gaps/skips
-      const reordered = mainTasks.slice();
-      const [moved] = reordered.splice(currentPos-1, 1);
-      reordered.splice(newPos-1, 0, moved);
+      const options = mainTasks.map((mt, idx)=>{
+        const n=idx+1;
+        const label = `${n}. ${mt.title || '(untitled)'}`;
+        return `<option value="${n}" ${n===currentPos?'selected':''}>${escapeHtml(label).slice(0,120)}</option>`;
+      }).join('');
 
-      // Apply updates in sequence
-      for (let i=0; i<reordered.length; i++) {
-        const task = reordered[i];
-        const desired = i+1;
-        if (Number(task.task_number) === desired) continue;
-        const { error } = await supabaseClient
-          .from('tasks')
-          .update({ task_number: desired })
-          .eq('id', task.id);
-        if (error) { setWarning(`Failed to reorder task: ${error.message}`); return; }
-      }
+      openSysModal({
+        title: 'Reorder task (mainline)',
+        bodyHtml: `
+          <div class="field">
+            <div class="fieldLbl">Move to position</div>
+            <select class="modalInput" id="reorderSelect">${options}</select>
+          </div>
+          <div style="font-size:12px;opacity:.7;line-height:1.35">
+            We will renumber mainline tasks 1..N to remove gaps and keep the plan tidy.
+          </div>
+        `,
+        actions: [
+          {label:'Cancel', className:'btn btn-ghost', onClick: closeSysModal},
+          {label:'Apply', className:'btn btn-primary', onClick: async ()=>{
+            const sel = document.getElementById('reorderSelect');
+            const newPos = Number(sel?.value);
+            if (!Number.isFinite(newPos) || newPos < 1 || newPos > mainTasks.length) return;
 
-      await loadEverythingForActivePlan();
-      return;
-    }
-  }
+            const reordered = mainTasks.slice();
+            const [moved] = reordered.splice(currentPos-1, 1);
+            reordered.splice(newPos-1, 0, moved);
+
+            for (let i=0; i<reordered.length; i++) {
+              const task = reordered[i];
+              const desired = i+1;
+              if (Number(task.task_number) === desired) continue;
+              const { error } = await supabaseClient.from('tasks').update({ task_number: desired }).eq('id', task.id);
+              if (error) { setWarning(`Failed to reorder task: ${error.message}`); return; }
+            }
+
+            closeSysModal();
+            await loadEverythingForActivePlan();
+          }}
+        ]
+      });
+    };
+  };
+
 
   async function addTask() {
     if (!activePlan) {
@@ -1842,44 +2142,7 @@ function renderTasks() {
     await loadEverythingForActivePlan();
   }
 
-  async function deactivateBranchLine(groupKeyStr){
-    const g = branchGroups.get(groupKeyStr);
-    if (!activePlan || !g) return;
-    if (!confirm(`Deactivate branch "${g.label}" and restore the main line?`)) return;
-
-    // Persist deactivate (ignore errors)
-    try{
-      const { error } = await supabaseClient
-        .from('plan_branch_states')
-        .upsert({
-          plan_id: activePlan.id,
-          origin_task_id: g.originTaskId,
-          label: g.label,
-          is_active: false,
-          updated_at: new Date().toISOString()
-        }, { onConflict: "plan_id,origin_task_id,label" });
-      if (error) throw error;
-    }catch(e){ /* ignore */ }
-
-    // Unmark N/A main tasks after divergence
-    try{
-      const toRestore = tasksCache
-        .filter(t => branchInfoCache.main.has(t.id) && t.is_na && Number(t.task_number||0) > Number(g.originTaskNumber||0))
-        .map(t => t.id);
-      if (toRestore.length){
-        const { error } = await supabaseClient
-          .from('tasks')
-          .update({ is_na: false })
-          .in('id', toRestore);
-        if (error) throw error;
-      }
-    }catch(e){ /* ignore */ }
-
-    branchActiveGroups.delete(groupKeyStr);
-    await loadEverythingForActivePlan();
-  }
-
-  async function toggleTaskComplete(taskId) {
+    async function toggleTaskComplete(taskId) {
     const t = tasksCache.find(x => x.id === taskId);
     if (!t) return;
     if (t?.is_na) { setWarning('That task is marked N/A (branch activated).'); return; }
@@ -1908,44 +2171,7 @@ function renderTasks() {
     await loadEverythingForActivePlan();
   }
 
-  async function deactivateBranchLine(groupKeyStr){
-    const g = branchGroups.get(groupKeyStr);
-    if (!activePlan || !g) return;
-    if (!confirm(`Deactivate branch "${g.label}" and restore the main line?`)) return;
-
-    // Persist deactivate (ignore errors)
-    try{
-      const { error } = await supabaseClient
-        .from('plan_branch_states')
-        .upsert({
-          plan_id: activePlan.id,
-          origin_task_id: g.originTaskId,
-          label: g.label,
-          is_active: false,
-          updated_at: new Date().toISOString()
-        }, { onConflict: "plan_id,origin_task_id,label" });
-      if (error) throw error;
-    }catch(e){ /* ignore */ }
-
-    // Unmark N/A main tasks after divergence
-    try{
-      const toRestore = tasksCache
-        .filter(t => branchInfoCache.main.has(t.id) && t.is_na && Number(t.task_number||0) > Number(g.originTaskNumber||0))
-        .map(t => t.id);
-      if (toRestore.length){
-        const { error } = await supabaseClient
-          .from('tasks')
-          .update({ is_na: false })
-          .in('id', toRestore);
-        if (error) throw error;
-      }
-    }catch(e){ /* ignore */ }
-
-    branchActiveGroups.delete(groupKeyStr);
-    await loadEverythingForActivePlan();
-  }
-
-  function nextLetter(existingLetters) {
+    function nextLetter(existingLetters) {
     const alphabet = 'abcdefghijklmnopqrstuvwxyz';
     for (const ch of alphabet) {
       if (!existingLetters.has(ch)) return ch;
@@ -1954,25 +2180,49 @@ function renderTasks() {
   }
 
   async function addSubtaskPrompt(taskId) {
+  try {
     const title = prompt('Subtask title');
     if (!title) return;
 
-    const existing = new Set((subtasksCache[taskId] || []).map(s => String(s.sub_letter).toLowerCase()));
+    // subtasksCache is maintained as: { [task_id]: Subtask[] }
+    let list = [];
+    if (subtasksCache) {
+      if (Array.isArray(subtasksCache)) {
+        list = subtasksCache.filter(s => s.task_id === taskId);
+      } else if (Array.isArray(subtasksCache[taskId])) {
+        list = subtasksCache[taskId];
+      } else {
+        // flat object keyed by id -> subtask
+        const vals = Object.values(subtasksCache);
+        if (vals.length && typeof vals[0] === 'object') {
+          list = vals.filter(s => s.task_id === taskId);
+        }
+      }
+    }
+
+    const existing = new Set((list || []).map(s => String(s.sub_letter || '').toLowerCase()).filter(Boolean));
     const letter = nextLetter(existing);
     if (!letter) { setWarning('Too many subtasks. You have successfully outgrown the alphabet.'); return; }
 
+    const payload = { task_id: taskId, sub_letter: letter, title: title.trim() };
+
     const { error } = await supabaseClient
       .from('subtasks')
-      .insert({ task_id: taskId, sub_letter: letter, title: title.trim() });
+      .insert(payload);
 
-    if (error) { setWarning(`Failed to add subtask: ${error.message}`); return; }
+    if (error) {
+      setWarning(`Failed to add subtask: ${error.message}`);
+      console.warn('Subtask insert failed', error);
+      return;
+    }
 
     await loadSubtasks();
-    persistCollapsedBranchGroups();
     renderTasks();
-    updateProgressBar();
-    updateTimingHealth();
+  } catch (e) {
+    console.error(e);
+    setWarning('Failed to add subtask (unexpected). Check console.');
   }
+}
 
   async function completeSubtask(subtaskId) {
     const { error } = await supabaseClient
@@ -2010,45 +2260,10 @@ function renderTasks() {
     await refreshAll();
     await loadEverythingForActivePlan();
   }
+    window.createPlanPrompt = createPlanPrompt;
 
-  async function deactivateBranchLine(groupKeyStr){
-    const g = branchGroups.get(groupKeyStr);
-    if (!activePlan || !g) return;
-    if (!confirm(`Deactivate branch "${g.label}" and restore the main line?`)) return;
 
-    // Persist deactivate (ignore errors)
-    try{
-      const { error } = await supabaseClient
-        .from('plan_branch_states')
-        .upsert({
-          plan_id: activePlan.id,
-          origin_task_id: g.originTaskId,
-          label: g.label,
-          is_active: false,
-          updated_at: new Date().toISOString()
-        }, { onConflict: "plan_id,origin_task_id,label" });
-      if (error) throw error;
-    }catch(e){ /* ignore */ }
-
-    // Unmark N/A main tasks after divergence
-    try{
-      const toRestore = tasksCache
-        .filter(t => branchInfoCache.main.has(t.id) && t.is_na && Number(t.task_number||0) > Number(g.originTaskNumber||0))
-        .map(t => t.id);
-      if (toRestore.length){
-        const { error } = await supabaseClient
-          .from('tasks')
-          .update({ is_na: false })
-          .in('id', toRestore);
-        if (error) throw error;
-      }
-    }catch(e){ /* ignore */ }
-
-    branchActiveGroups.delete(groupKeyStr);
-    await loadEverythingForActivePlan();
-  }
-
-  async function closePlan() {
+    async function closePlan() {
     if (!activePlan) { setWarning('No active plan selected.'); return; }
     if (!confirm('Close this incident and lock the plan? This prevents further edits.')) return;
 
@@ -2550,8 +2765,14 @@ function renderTasks() {
           plan_id: newPlan.id,
           task_number: st.task_number,
           title: st.title,
-          predicted_time: st.predicted_time,
+          // carry template durations + branch structure
+          expected_minutes: (typeof st.expected_minutes === 'number') ? st.expected_minutes : (st.expected_minutes ? parseInt(st.expected_minutes,10) : null),
+          branch_group_id: st.branch_group_id || null,
+          branch_seq: (typeof st.branch_seq === 'number') ? st.branch_seq : (st.branch_seq ? parseInt(st.branch_seq,10) : null),
+          // cloned plans start "fresh"
+          predicted_time: null,
           completed_at: null,
+          is_na: false,
           position_x: st.position_x,
           position_y: st.position_y
         })
@@ -2613,44 +2834,7 @@ function renderTasks() {
     await loadEverythingForActivePlan();
   }
 
-  async function deactivateBranchLine(groupKeyStr){
-    const g = branchGroups.get(groupKeyStr);
-    if (!activePlan || !g) return;
-    if (!confirm(`Deactivate branch "${g.label}" and restore the main line?`)) return;
-
-    // Persist deactivate (ignore errors)
-    try{
-      const { error } = await supabaseClient
-        .from('plan_branch_states')
-        .upsert({
-          plan_id: activePlan.id,
-          origin_task_id: g.originTaskId,
-          label: g.label,
-          is_active: false,
-          updated_at: new Date().toISOString()
-        }, { onConflict: "plan_id,origin_task_id,label" });
-      if (error) throw error;
-    }catch(e){ /* ignore */ }
-
-    // Unmark N/A main tasks after divergence
-    try{
-      const toRestore = tasksCache
-        .filter(t => branchInfoCache.main.has(t.id) && t.is_na && Number(t.task_number||0) > Number(g.originTaskNumber||0))
-        .map(t => t.id);
-      if (toRestore.length){
-        const { error } = await supabaseClient
-          .from('tasks')
-          .update({ is_na: false })
-          .in('id', toRestore);
-        if (error) throw error;
-      }
-    }catch(e){ /* ignore */ }
-
-    branchActiveGroups.delete(groupKeyStr);
-    await loadEverythingForActivePlan();
-  }
-
-  // ===== Small loop that silently judges everyone =====
+    // ===== Small loop that silently judges everyone =====
   setInterval(() => {
     // Refresh due/overdue pills + RAG without hammering the DB
     if (currentView === 'open' && activePlan) {
@@ -2699,6 +2883,10 @@ function renderTasks() {
       vp.style.cursor = '';
     });
   }
+
+
+
+
 
 // ===== Boot =====
   setView('open');
@@ -2849,6 +3037,16 @@ document.getElementById('publishBtn')?.addEventListener('click', async () => {
   }
 });
 </script>
+
+  <!-- System Modal -->
+  <div id="sysModalBackdrop" class="modalBack" style="display:none" aria-hidden="true">
+    <div class="modalCard" role="dialog" aria-modal="true" aria-labelledby="sysModalTitle">
+      <div class="modalHeader" id="sysModalTitle"></div>
+      <div class="modalBody" id="sysModalBody"></div>
+      <div class="modalFooter" id="sysModalFooter"></div>
+    </div>
+  </div>
+
 </body>
 
 </html>
