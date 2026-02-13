@@ -570,8 +570,7 @@
 <div id="memoryView" style="display:none;">
     <div class="card">
       <h2 style="margin:0;">Memory</h2>
-      <div class="muted" style="margin-top:.25rem;">Closed plans, read-only. You can clone them to avoid reinventing the wheel.
-        The wheel will still be on fire, but at least it’s familiar.</div>
+      <div class="muted" style="margin-top:.25rem;">Closed plans, read-only. Clone to use as templates.</div>
 
       <div class="searchRow">
         <input id="memSearch" type="text" placeholder="Search titles/descriptions..." oninput="loadMemory()" />
@@ -2724,7 +2723,7 @@ window.recomputePredictedTimes = recomputePredictedTimes;
     // completion buttons get disabled in render based on completed_at only; we’ll blanket-disable for closed plans
     // Simple approach: warn user.
     if (isClosed) {
-      setWarning('Viewing a CLOSED plan. Read-only mode. No edits, no “just a quick tweak”.');
+      setWarning('Viewing a CLOSED plan. Read-only mode. No edits”.');
       // disable all inputs/buttons in task list
       document.querySelectorAll('#taskList input, #taskList button').forEach(el => el.disabled = true);
     }
