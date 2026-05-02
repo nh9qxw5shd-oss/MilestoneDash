@@ -2159,15 +2159,42 @@ window.recomputePredictedTimes = recomputePredictedTimes;
       return;
     }
 
-    // Mark complete
-    const { error } = await supabaseClient
-      .from('tasks')
-      .update({ completed_at: new Date().toISOString() })
-      .eq('id', taskId);
+    // Mark complete — show modal so user can adjust the recorded time
+    const nowIso = new Date().toISOString();
+    const nowLocal = isoToLocalInputValue(nowIso);
 
-    if (error) { setWarning(`Failed to complete task: ${error.message}`); return; }
-
-    await loadEverythingForActivePlan();
+    openSysModal({
+      title: 'Mark task complete',
+      bodyHtml: `
+        <p style="margin:0 0 .75rem;">Set the completion time (edit if you were late pressing the button):</p>
+        <input id="completionTimeInput" type="datetime-local" value="${nowLocal}"
+               style="width:100%;padding:.5rem .6rem;border:1px solid var(--border,#ccc);border-radius:6px;font-size:1rem;">
+      `,
+      allowBackdropClose: false,
+      actions: [
+        {
+          label: 'Cancel',
+          className: 'btn btn-ghost',
+          onClick: closeSysModal
+        },
+        {
+          label: '✓ Confirm done',
+          className: 'btn btn-primary',
+          onClick: async () => {
+            const input = document.getElementById('completionTimeInput');
+            const parsed = input ? parseDateTimeLocal(input.value) : null;
+            const completedAt = parsed ? parsed.toISOString() : nowIso;
+            closeSysModal();
+            const { error } = await supabaseClient
+              .from('tasks')
+              .update({ completed_at: completedAt })
+              .eq('id', taskId);
+            if (error) { setWarning(`Failed to complete task: ${error.message}`); return; }
+            await loadEverythingForActivePlan();
+          }
+        }
+      ]
+    });
   }
 
     function nextLetter(existingLetters) {
