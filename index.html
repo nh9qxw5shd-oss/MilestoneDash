@@ -2046,14 +2046,40 @@ window.recomputePredictedTimes = recomputePredictedTimes;
     };
 
     if (btnDelete) btnDelete.onclick = ()=>{
+      // Determine if this is the entry point of a branch (has an incoming labeled edge)
+      const branchEntryEdge = edgesCache.find(e => e.to_task_id === taskId && (e.label || '').trim());
+      const meta = branchTaskMeta.get(taskId);
+      const group = meta ? branchGroups.get(meta.groupKey) : null;
+      const isBranchEntry = !!branchEntryEdge;
+
+      // If deleting the first task of a branch, also delete all other tasks in that branch
+      const taskIdsToDelete = (isBranchEntry && group)
+        ? [...group.taskIds]
+        : [taskId];
+
+      const extraMsg = (isBranchEntry && taskIdsToDelete.length > 1)
+        ? ` This will also delete the entire branch (${taskIdsToDelete.length} tasks).`
+        : '';
+
       openSysModal({
         title: 'Delete task',
-        bodyHtml: `<div style="opacity:.85;line-height:1.35">Delete <b>${escapeHtml(t.title||'this task')}</b>? This cannot be undone.</div>`,
+        bodyHtml: `<div style="opacity:.85;line-height:1.35">Delete <b>${escapeHtml(t.title||'this task')}</b>? This cannot be undone.${extraMsg}</div>`,
         actions: [
           {label:'Cancel', className:'btn btn-ghost', onClick: closeSysModal},
           {label:'Delete', className:'btn btn-danger', onClick: async ()=>{
-            const { error } = await supabaseClient.from('tasks').delete().eq('id', taskId);
-            if (error) { setWarning(`Failed to delete task: ${error.message}`); return; }
+            // Delete all edges referencing any of the tasks being removed
+            for (const tid of taskIdsToDelete) {
+              const { error: eErr } = await supabaseClient
+                .from('edges')
+                .delete()
+                .or(`from_task_id.eq.${tid},to_task_id.eq.${tid}`);
+              if (eErr) { setWarning(`Failed to delete task edges: ${eErr.message}`); return; }
+            }
+            // Delete all tasks
+            for (const tid of taskIdsToDelete) {
+              const { error } = await supabaseClient.from('tasks').delete().eq('id', tid);
+              if (error) { setWarning(`Failed to delete task: ${error.message}`); return; }
+            }
             closeSysModal();
             await loadEverythingForActivePlan();
           }}
