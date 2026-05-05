@@ -465,6 +465,19 @@
 .modalInput{width:100%;padding:10px 12px;border-radius:12px;border:1px solid rgba(15,23,42,.16);outline:none}
 .modalInput:focus{border-color:rgba(59,130,246,.75);box-shadow:0 0 0 3px rgba(59,130,246,.18)}
 
+.tplIdBadge{
+  display:inline-block;
+  background:#eef2ff;
+  color:#3730a3;
+  border:1px solid #c7d2fe;
+  border-radius:.5rem;
+  padding:.1rem .45rem;
+  font-size:.78rem;
+  font-weight:900;
+  margin-right:.4rem;
+  letter-spacing:.02em;
+}
+
 </style>
 </head>
 <body>
@@ -473,10 +486,11 @@
   <strong>Milestone Plan Dashboard</strong>
   <div class="right">
     <button class="btn-ghost" id="btnViewOpen" onclick="setView('open')">Open</button>
+    <button class="btn-ghost" id="btnViewTemplates" onclick="setView('templates')">Templates</button>
     <button class="btn-ghost" id="btnViewMemory" onclick="setView('memory')">Memory</button>
     <button class="btn" onclick="refreshAll()">Refresh</button><button id="publishBtn" class="btn btn-secondary" style="margin-left:8px">Publish</button>
     <button class="btn-primary" onclick="createPlanPrompt()">New Plan</button>
-    <button class="btn-danger" onclick="closePlan()">Close Incident</button>
+    <button class="btn-danger" id="btnCloseIncident" onclick="closePlan()">Close Incident</button>
   </div>
 </header>
 
@@ -489,18 +503,29 @@
         <h2 id="planTitle" style="margin:0 0 .25rem 0;"></h2>
         <div id="planDesc" class="muted"></div>
 
-        
-        <div class="kpis">
-          <span class="kpi" id="kpiStatus">Status: -</span>
-          <span class="kpi" id="kpiViewers">Viewers: -</span>
+
+        <div id="incidentTopMeta">
+          <div class="kpis">
+            <span class="kpi" id="kpiStatus">Status: -</span>
+            <span class="kpi" id="kpiViewers">Viewers: -</span>
+          </div>
+
+          <div class="progRow">
+            <div class="progLabel" id="kpiProgress">Progress: 0%</div>
+            <div class="progBar"><div class="progFill" id="progFill" style="width:0%"></div></div>
+          </div>
+        </div>
+        <div id="templateTopMeta" style="display:none;">
+          <div class="kpis">
+            <span class="kpi" id="kpiTemplateId">Template: -</span>
+            <span class="kpi">Mode: framework only</span>
+          </div>
+          <div class="muted" style="margin-top:.4rem;">
+            Define tasks, subtasks, durations and branches. No timings, completions or refs.
+          </div>
         </div>
 
-        <div class="progRow">
-          <div class="progLabel" id="kpiProgress">Progress: 0%</div>
-          <div class="progBar"><div class="progFill" id="progFill" style="width:0%"></div></div>
-        </div>
-
-        <div class="settingsGrid">
+        <div class="settingsGrid" id="planSettingsGrid">
           <div class="setting">
 <div class="refsGrid">
               <div class="field">
@@ -579,6 +604,22 @@
 
       <div id="memList" class="memList"></div>
       <div id="memWarn" class="warn" style="display:none;"></div>
+    </div>
+  </div>
+
+  <div id="templatesView" style="display:none;">
+    <div class="card">
+      <h2 style="margin:0;">Milestone Templates</h2>
+      <div class="muted" style="margin-top:.25rem;">Pre-built frameworks (tasks, subtasks, durations, branches). Use as the starting point for an incident.</div>
+
+      <div class="searchRow">
+        <input id="tplSearch" type="text" placeholder="Search templates..." oninput="loadTemplates()" />
+        <button class="btn" onclick="loadTemplates()">Search</button>
+        <button class="btn-primary" onclick="createTemplatePrompt()">New Template</button>
+      </div>
+
+      <div id="tplList" class="memList"></div>
+      <div id="tplWarn" class="warn" style="display:none;"></div>
     </div>
   </div>
 </main>
@@ -1457,16 +1498,63 @@ function renderBranchTogglesForOrigin(originTaskId) {
     btn.disabled = !enabled;
   }
 
-  function setView(view) {
+  function isTemplateMode(){
+    return !!(activePlan && activePlan.status === 'template');
+  }
+
+  function applyChromeForActivePlan(){
+    const tabs = document.getElementById('tabs');
+    const closeBtn = document.getElementById('btnCloseIncident');
+    const publishBtn = document.getElementById('publishBtn');
+    const settingsGrid = document.getElementById('planSettingsGrid');
+    const incidentMeta = document.getElementById('incidentTopMeta');
+    const templateMeta = document.getElementById('templateTopMeta');
+    const tpl = isTemplateMode();
+
+    if (tabs) tabs.style.display = (tpl || currentView !== 'open') ? 'none' : '';
+    if (closeBtn) closeBtn.style.display = tpl ? 'none' : '';
+    if (publishBtn) publishBtn.style.display = tpl ? 'none' : '';
+    if (settingsGrid) settingsGrid.style.display = tpl ? 'none' : '';
+    if (incidentMeta) incidentMeta.style.display = tpl ? 'none' : '';
+    if (templateMeta) {
+      templateMeta.style.display = tpl ? '' : 'none';
+      if (tpl){
+        const idEl = document.getElementById('kpiTemplateId');
+        if (idEl) idEl.textContent = 'Template: ' + (extractTemplateId(activePlan?.title) || 'MT??');
+      }
+    }
+  }
+
+  async function setView(view) {
+    // If user is leaving the template editor by clicking "Open", switch off the template
+    // and refresh open incidents so the open view is meaningful.
+    const wasTemplateMode = isTemplateMode();
+    if (view === 'open' && wasTemplateMode) {
+      activePlan = null;
+    }
+
     currentView = view;
     document.getElementById('openView').style.display = (view === 'open') ? '' : 'none';
     document.getElementById('memoryView').style.display = (view === 'memory') ? '' : 'none';
+    document.getElementById('templatesView').style.display = (view === 'templates') ? '' : 'none';
 
     document.getElementById('btnViewOpen').style.opacity = (view === 'open') ? '1' : '.7';
     document.getElementById('btnViewMemory').style.opacity = (view === 'memory') ? '1' : '.7';
+    const tplBtn = document.getElementById('btnViewTemplates');
+    if (tplBtn) tplBtn.style.opacity = (view === 'templates') ? '1' : '.7';
+
+    applyChromeForActivePlan();
 
     if (view === 'memory') loadMemory();
+    if (view === 'templates') loadTemplates();
+    if (view === 'open' && wasTemplateMode) {
+      // Reload incident list and pick one
+      await loadPlans();
+      if (activePlan) await loadEverythingForActivePlan();
+      applyChromeForActivePlan();
+    }
   }
+  window.setView = setView;
   function updateProgressKpis() {
     const total = tasksCache.length;
     const done = tasksCache.filter(t => !!t.completed_at).length;
@@ -1479,16 +1567,25 @@ function renderBranchTogglesForOrigin(originTaskId) {
       document.getElementById('planTitle').textContent = 'No open plans';
       document.getElementById('planDesc').textContent = 'Create a new plan to start.';
       document.getElementById('statusLine').textContent = '';
-      document.getElementById('kpiStatus').textContent = 'Status: -';
+      const ks = document.getElementById('kpiStatus');
+      if (ks) ks.textContent = 'Status: -';
       const pf=document.getElementById('progFill'); if(pf) pf.style.width='0%';
       // progress handled by progress bar
       return;
     }
     setAddTaskEnabled(true);
-    document.getElementById('planTitle').textContent = activePlan.title;
-    document.getElementById('planDesc').textContent = activePlan.description || '';
+    if (isTemplateMode()){
+      const tplId = extractTemplateId(activePlan.title) || 'MT??';
+      const name = extractTemplateName(activePlan.title) || activePlan.title;
+      document.getElementById('planTitle').innerHTML = `<span class="tplIdBadge">${escapeHtml(tplId)}</span>${escapeHtml(name)}`;
+      document.getElementById('planDesc').textContent = 'Template — framework only (no timings or refs).';
+    } else {
+      document.getElementById('planTitle').textContent = activePlan.title;
+      document.getElementById('planDesc').textContent = activePlan.description || '';
+    }
     document.getElementById('statusLine').textContent = '';
-    document.getElementById('kpiStatus').textContent = `Status: ${activePlan.status || 'open'}`;
+    const ks = document.getElementById('kpiStatus');
+    if (ks) ks.textContent = `Status: ${activePlan.status || 'open'}`;
   }
 
   // ===== Data loading =====
@@ -1497,8 +1594,10 @@ function renderBranchTogglesForOrigin(originTaskId) {
     await loadPlans();
     if (activePlan) {
       await loadEverythingForActivePlan();
-      await loadPlanSettings();
-      updateTimingHealth();
+      if (!isTemplateMode()){
+        await loadPlanSettings();
+        updateTimingHealth();
+      }
     }
   }
 
@@ -1526,6 +1625,27 @@ function renderBranchTogglesForOrigin(originTaskId) {
 
     const tabs = document.getElementById('tabs');
     tabs.innerHTML = '';
+
+    // If a template is being edited, don't replace it via the open-plans loader.
+    if (isTemplateMode()) {
+      // Still render tabs for any existing open incidents so the user can switch.
+      data.forEach(p => {
+        const t = document.createElement('div');
+        t.className = 'tab';
+        t.innerHTML = `${escapeHtml(p.title)} <span class="badge">open</span>`;
+        t.onclick = async () => {
+          activePlan = p;
+          await loadEverythingForActivePlan();
+          await loadPlanSettings();
+          await startViewerPresence();
+          setView('open');
+          repaintTabs();
+        };
+        tabs.appendChild(t);
+      });
+      renderPlanHeader();
+      return;
+    }
 
     if (!data || data.length === 0) {
       activePlan = null;
@@ -1572,21 +1692,25 @@ function renderBranchTogglesForOrigin(originTaskId) {
     loadCollapsedBranchGroups();
 
     renderPlanHeader();
+    applyChromeForActivePlan();
     // Load tasks + edges first so we can determine main vs branches before rendering cards
     await loadTasks();
     await loadEdges();
     recomputeBranchCache();
     await loadBranchStates();
     await loadSubtasks();
-    await loadPlanSettings();
 
-    // Compute predicted times from Start time + Expected durations
-    await recomputePredictedTimes(false);
+    if (!isTemplateMode()){
+      await loadPlanSettings();
+      await recomputePredictedTimes(false);
+    }
 
     renderTasks();
-    updateProgressBar();
-    updateTimingHealth();
-    await startViewerPresence();
+    if (!isTemplateMode()){
+      updateProgressBar();
+      updateTimingHealth();
+      await startViewerPresence();
+    }
   }
 
   async function loadTasks() {
@@ -1680,12 +1804,14 @@ function renderTasks() {
 
     setAddTaskEnabled(true);
 
+    const tpl = isTemplateMode();
     tasksCache.forEach(t => {
       if (isTaskHiddenByBranchCollapse(t.id)) return;
       if (isTaskHiddenByBranchCollapse(t.id)) return;
       const d = document.createElement('div');
-      const vizClass = getTaskVizClass(t);
-      d.className = `task ${ragClassForTask(t)} ${vizClass} ${t.is_na ? 'na' : ''}`;
+      const vizClass = tpl ? '' : getTaskVizClass(t);
+      const ragClass = tpl ? '' : ragClassForTask(t);
+      d.className = `task ${ragClass} ${vizClass} ${(!tpl && t.is_na) ? 'na' : ''}`;
       d.id = `task-${t.id}`;
 
       const hasPred = !!t.predicted_time;
@@ -1712,6 +1838,17 @@ function renderTasks() {
           ${subList.length ? subList.map(s => {
             const sid = `${t.task_number}${escapeHtml(s.sub_letter)}`;
             const done = !!s.completed_at;
+            if (tpl) {
+              return `
+                <div class="subrow">
+                  <div class="subid">${sid}</div>
+                  <div>
+                    <div style="font-weight:800;">${escapeHtml(s.title)}</div>
+                  </div>
+                  <button class="mini light" onclick="deleteSubtaskPrompt('${s.id}')">Delete</button>
+                </div>
+              `;
+            }
             return `
               <div class="subrow">
                 <div class="subid">${sid}</div>
@@ -1726,14 +1863,50 @@ function renderTasks() {
         </div>
       `;
 
-      d.innerHTML = `
-        <div class="taskNum">${getTaskDisplayNumber(t)}</div>
-        <div>
-          <div class="taskTitle">${escapeHtml(t.title)} ${getBranchBadgeHtml(t.id)}${getBranchCueHtml(t.id)} ${getOriginContingencyPill(t.id)} ${t.is_na ? `<span class="pill pill-na">N/A</span>` : ``}</div>
+      const titleRow = tpl
+        ? `<div class="taskTitle">${escapeHtml(t.title)} ${getBranchBadgeHtml(t.id)}</div>`
+        : `<div class="taskTitle">${escapeHtml(t.title)} ${getBranchBadgeHtml(t.id)}${getBranchCueHtml(t.id)} ${getOriginContingencyPill(t.id)} ${t.is_na ? `<span class="pill pill-na">N/A</span>` : ``}</div>`;
+
+      const metaRow = tpl ? '' : `
           <div class="taskMeta muted">${timingText}
             ${hasPred && isDone ? variancePill(varianceMins) : ''}
             ${hasPred && !isDone ? duePill(dueDelta) : ''}
-          </div>
+          </div>`;
+
+      const branchControls = tpl
+        ? `${renderBranchTogglesForOrigin(t.id)}`
+        : `${renderBranchTogglesForOrigin(t.id)} ${renderBranchActivateButton(t.id)}`;
+
+      const originCue = tpl ? '' : renderOriginBranchCue(t.id);
+
+      const rightCol = tpl
+        ? `<div class="rightCol">
+            <div class="durWrap">
+              <div class="muted" style="font-size:.85rem; margin-top:-.1rem;">Expected duration (mins)</div>
+              <select class="durSelect" onchange="onDurationSelectChange('${t.id}', this)">
+                ${renderDurationOptions(t.expected_minutes)}
+              </select>
+            </div>
+          </div>`
+        : `<div class="rightCol">
+            ${rightTop}
+            <div class="durWrap">
+              <div class="muted" style="font-size:.85rem; margin-top:-.1rem;">Expected duration (mins)</div>
+              <select class="durSelect" ${(isDone||t.is_na) ? 'disabled' : ''} onchange="onDurationSelectChange('${t.id}', this)">
+                ${renderDurationOptions(t.expected_minutes)}
+              </select>
+              <div class="muted" style="font-size:.85rem; margin-top:.25rem;">Predicted: ${hasPred ? fmtDT(t.predicted_time) : '—'}</div>
+            </div>
+            <div style="margin-top:.5rem;">
+              <button class="complete ${isDone ? 'done' : ''}" ${(t.is_na) ? 'disabled' : ''} onclick="toggleTaskComplete('${t.id}')">${isDone ? '✓ Done (undo)' : 'Complete'}</button>
+            </div>
+          </div>`;
+
+      d.innerHTML = `
+        <div class="taskNum">${getTaskDisplayNumber(t)}</div>
+        <div>
+          ${titleRow}
+          ${metaRow}
 
           <div class="controls" style="margin-top:.5rem;">
             <div class="actionMenu" id="am-${t.id}">
@@ -1744,25 +1917,13 @@ function renderTasks() {
                 <button class="mini light" onclick="addBranchFromTask('${t.id}')">Add branch</button>
               </div>
             </div>
-            ${renderBranchTogglesForOrigin(t.id)} ${renderBranchActivateButton(t.id)}
+            ${branchControls}
           </div>
-          ${renderOriginBranchCue(t.id)}
+          ${originCue}
 
           ${subHtml}
         </div>
-        <div class="rightCol">
-          ${rightTop}
-          <div class="durWrap">
-            <div class="muted" style="font-size:.85rem; margin-top:-.1rem;">Expected duration (mins)</div>
-            <select class="durSelect" ${(isDone||t.is_na) ? 'disabled' : ''} onchange="onDurationSelectChange('${t.id}', this)">
-              ${renderDurationOptions(t.expected_minutes)}
-            </select>
-            <div class="muted" style="font-size:.85rem; margin-top:.25rem;">Predicted: ${hasPred ? fmtDT(t.predicted_time) : '—'}</div>
-          </div>
-          <div style="margin-top:.5rem;">
-            <button class="complete ${isDone ? 'done' : ''}" ${(t.is_na) ? 'disabled' : ''} onclick="toggleTaskComplete('${t.id}')">${isDone ? '✓ Done (undo)' : 'Complete'}</button>
-          </div>
-        </div>
+        ${rightCol}
       `;
 
       list.appendChild(d);
@@ -2291,28 +2452,359 @@ window.recomputePredictedTimes = recomputePredictedTimes;
     updateTimingHealth();
   }
 
+  async function deleteSubtaskPrompt(subtaskId){
+    openSysModal({
+      title: 'Delete subtask',
+      bodyHtml: `<div style="opacity:.85;line-height:1.35">Remove this subtask from the template? This cannot be undone.</div>`,
+      actions: [
+        {label:'Cancel', className:'btn btn-ghost', onClick: closeSysModal},
+        {label:'Delete', className:'btn btn-danger', onClick: async ()=>{
+          const { error } = await supabaseClient.from('subtasks').delete().eq('id', subtaskId);
+          if (error) { setWarning(`Failed to delete subtask: ${error.message}`); closeSysModal(); return; }
+          closeSysModal();
+          await loadSubtasks();
+          renderTasks();
+        }}
+      ]
+    });
+  }
+  window.deleteSubtaskPrompt = deleteSubtaskPrompt;
+
   // ===== Plan lifecycle =====
-  async function createPlanPrompt() {
+  function createPlanPrompt() {
     clearWarning();
 
-    const title = prompt('New plan title (incident / fault name)');
-    if (!title) return;
+    openSysModal({
+      title: 'Create new plan',
+      bodyHtml: `
+        <div class="modalOptionGrid">
+          <button class="modalOptionBtn" id="optChoiceIncident" type="button">
+            <div class="t">Incident</div>
+            <div class="s">Live milestone tracking with start time, refs (FMS/CCIL/TDA), command structure, predictions and completions.</div>
+          </button>
+          <button class="modalOptionBtn" id="optChoiceTemplate" type="button">
+            <div class="t">Template</div>
+            <div class="s">Reusable framework: tasks, subtasks, durations and branches only. No timings or refs. Auto-assigned MT id.</div>
+          </button>
+        </div>
+      `,
+      actions: [{label:'Cancel', className:'btn btn-ghost', onClick: closeSysModal}]
+    });
 
-    const description = prompt('Brief description (optional)') || '';
+    const inc = document.getElementById('optChoiceIncident');
+    const tpl = document.getElementById('optChoiceTemplate');
+    if (inc) inc.onclick = () => { closeSysModal(); createIncidentPlanPrompt(); };
+    if (tpl) tpl.onclick = () => { closeSysModal(); createTemplatePrompt(); };
+  }
+  window.createPlanPrompt = createPlanPrompt;
 
+  async function createIncidentPlanPrompt() {
+    openSysModal({
+      title: 'New incident plan',
+      bodyHtml: `
+        <div class="field">
+          <div class="fieldLbl">Incident / fault title</div>
+          <input class="modalInput" id="newIncidentTitle" placeholder="e.g. Rough ride at platform 5" />
+        </div>
+        <div class="field" style="margin-top:.6rem;">
+          <div class="fieldLbl">Brief description (optional)</div>
+          <input class="modalInput" id="newIncidentDesc" placeholder="Short context" />
+        </div>
+      `,
+      actions: [
+        {label:'Cancel', className:'btn btn-ghost', onClick: closeSysModal},
+        {label:'Create incident', className:'btn btn-primary', onClick: async ()=>{
+          const title = (document.getElementById('newIncidentTitle')?.value || '').trim();
+          if (!title) return;
+          const description = (document.getElementById('newIncidentDesc')?.value || '').trim();
+          const { data, error } = await supabaseClient
+            .from('plans')
+            .insert({ title, description, status: 'open' })
+            .select('*')
+            .single();
+          if (error) { setWarning(`Failed to create plan: ${error.message}`); closeSysModal(); return; }
+          closeSysModal();
+          activePlan = data;
+          setView('open');
+          await refreshAll();
+          await loadEverythingForActivePlan();
+        }}
+      ]
+    });
+    setTimeout(()=>document.getElementById('newIncidentTitle')?.focus(), 0);
+  }
+
+  // Template ID helpers
+  function extractTemplateId(title){
+    if (!title) return null;
+    const m = String(title).match(/^(MT\d+)\b/i);
+    return m ? m[1].toUpperCase() : null;
+  }
+  function extractTemplateName(title){
+    if (!title) return '';
+    const m = String(title).match(/^MT\d+\s*-\s*(.*)$/i);
+    return m ? m[1].trim() : String(title);
+  }
+  async function getNextTemplateId(){
+    let maxN = 0;
+    try{
+      const { data, error } = await supabaseClient
+        .from('plans')
+        .select('title')
+        .eq('status', 'template');
+      if (error) throw error;
+      (data || []).forEach(p => {
+        const m = String(p.title || '').match(/^MT(\d+)\b/i);
+        if (m) {
+          const n = parseInt(m[1], 10);
+          if (Number.isFinite(n) && n > maxN) maxN = n;
+        }
+      });
+    }catch(e){
+      // Fall back to local cache only
+      console.warn('getNextTemplateId fallback', e);
+    }
+    return 'MT' + String(maxN + 1).padStart(2, '0');
+  }
+
+  async function createTemplatePrompt(){
+    clearWarning();
+    const nextId = await getNextTemplateId();
+    openSysModal({
+      title: 'New template',
+      bodyHtml: `
+        <div class="field">
+          <div class="fieldLbl">Template name (e.g. "Rough ride")</div>
+          <input class="modalInput" id="newTemplateName" placeholder="Template name" />
+        </div>
+        <div class="muted" style="margin-top:.5rem;font-size:.85rem;">
+          Template ID will be assigned automatically: <span class="tplIdBadge">${escapeHtml(nextId)}</span>
+        </div>
+      `,
+      actions: [
+        {label:'Cancel', className:'btn btn-ghost', onClick: closeSysModal},
+        {label:'Create template', className:'btn btn-primary', onClick: async ()=>{
+          const name = (document.getElementById('newTemplateName')?.value || '').trim();
+          if (!name) return;
+          // Re-fetch in case another user/session created one in the meantime.
+          const mtId = await getNextTemplateId();
+          const title = `${mtId} - ${name}`;
+          const { data, error } = await supabaseClient
+            .from('plans')
+            .insert({ title, description: '', status: 'template' })
+            .select('*')
+            .single();
+          if (error) {
+            setTplWarn(`Failed to create template: ${error.message}`);
+            closeSysModal();
+            return;
+          }
+          closeSysModal();
+          activePlan = data;
+          await loadEverythingForActivePlan();
+          setView('open');
+        }}
+      ]
+    });
+    setTimeout(()=>document.getElementById('newTemplateName')?.focus(), 0);
+  }
+  window.createTemplatePrompt = createTemplatePrompt;
+
+  function setTplWarn(msg){
+    const el = document.getElementById('tplWarn');
+    if (!el) return;
+    el.style.display = 'block';
+    el.textContent = msg;
+  }
+  function clearTplWarn(){
+    const el = document.getElementById('tplWarn');
+    if (!el) return;
+    el.style.display = 'none';
+    el.textContent = '';
+  }
+
+  async function loadTemplates(){
+    clearTplWarn();
+    const q = (document.getElementById('tplSearch')?.value || '').trim().toLowerCase();
     const { data, error } = await supabaseClient
       .from('plans')
-      .insert({ title: title.trim(), description: description.trim(), status: 'open' })
       .select('*')
-      .single();
+      .eq('status', 'template')
+      .order('created_at', { ascending: false })
+      .limit(200);
 
-    if (error) { setWarning(`Failed to create plan: ${error.message}`); return; }
+    if (error) {
+      setTplWarn(`Failed to load templates: ${error.message}`);
+      return;
+    }
 
-    activePlan = data;
-    await refreshAll();
-    await loadEverythingForActivePlan();
+    const filtered = (data || []).filter(p => {
+      if (!q) return true;
+      return (p.title || '').toLowerCase().includes(q);
+    });
+
+    const list = document.getElementById('tplList');
+    list.innerHTML = '';
+
+    if (!filtered.length) {
+      list.innerHTML = `<div class="muted">No templates yet. Click "New Template" to create one.</div>`;
+      return;
+    }
+
+    filtered.forEach(p => {
+      const tplId = extractTemplateId(p.title) || 'MT??';
+      const name = extractTemplateName(p.title) || p.title;
+      const row = document.createElement('div');
+      row.className = 'memItem';
+      row.innerHTML = `
+        <div>
+          <div class="title"><span class="tplIdBadge">${escapeHtml(tplId)}</span>${escapeHtml(name)}</div>
+          <div class="meta">Created: ${fmtDT(p.created_at)}</div>
+        </div>
+        <div class="controls">
+          <button class="mini light" onclick="openTemplate('${p.id}')">Edit</button>
+          <button class="mini primary" onclick="useTemplateAsIncident('${p.id}')">Use as incident</button>
+          <button class="mini light" onclick="deleteTemplatePrompt('${p.id}')">Delete</button>
+        </div>
+      `;
+      list.appendChild(row);
+    });
   }
-    window.createPlanPrompt = createPlanPrompt;
+  window.loadTemplates = loadTemplates;
+
+  async function openTemplate(planId){
+    clearTplWarn();
+    const { data: plan, error } = await supabaseClient.from('plans').select('*').eq('id', planId).single();
+    if (error) { setTplWarn(`Failed to open template: ${error.message}`); return; }
+    activePlan = plan;
+    await loadEverythingForActivePlan();
+    setView('open');
+  }
+  window.openTemplate = openTemplate;
+
+  async function deleteTemplatePrompt(planId){
+    const { data: plan } = await supabaseClient.from('plans').select('*').eq('id', planId).single();
+    const label = plan ? (plan.title || 'this template') : 'this template';
+    openSysModal({
+      title: 'Delete template',
+      bodyHtml: `<div style="opacity:.85;line-height:1.35">Delete <b>${escapeHtml(label)}</b>? Tasks, subtasks and edges in this template will be removed. This cannot be undone.</div>`,
+      actions: [
+        {label:'Cancel', className:'btn btn-ghost', onClick: closeSysModal},
+        {label:'Delete', className:'btn btn-danger', onClick: async ()=>{
+          // Pull dependent rows first
+          const { data: tasks } = await supabaseClient.from('tasks').select('id').eq('plan_id', planId);
+          const taskIds = (tasks || []).map(t=>t.id);
+          if (taskIds.length){
+            await supabaseClient.from('subtasks').delete().in('task_id', taskIds);
+          }
+          await supabaseClient.from('edges').delete().eq('plan_id', planId);
+          await supabaseClient.from('tasks').delete().eq('plan_id', planId);
+          await supabaseClient.from('plans').delete().eq('id', planId);
+          if (activePlan && activePlan.id === planId) {
+            activePlan = null;
+          }
+          closeSysModal();
+          await loadTemplates();
+        }}
+      ]
+    });
+  }
+  window.deleteTemplatePrompt = deleteTemplatePrompt;
+
+  async function useTemplateAsIncident(templatePlanId){
+    const { data: srcPlan, error: pErr } = await supabaseClient.from('plans').select('*').eq('id', templatePlanId).single();
+    if (pErr) { setTplWarn(`Failed to load template: ${pErr.message}`); return; }
+    const baseName = extractTemplateName(srcPlan.title) || srcPlan.title || 'New incident';
+    openSysModal({
+      title: 'Use template as incident',
+      bodyHtml: `
+        <div class="field">
+          <div class="fieldLbl">Incident title</div>
+          <input class="modalInput" id="useTplTitle" value="${escapeHtml(baseName)}" />
+        </div>
+      `,
+      actions: [
+        {label:'Cancel', className:'btn btn-ghost', onClick: closeSysModal},
+        {label:'Create incident', className:'btn btn-primary', onClick: async ()=>{
+          const title = (document.getElementById('useTplTitle')?.value || '').trim();
+          if (!title) return;
+          // Create new open plan
+          const { data: newPlan, error: nErr } = await supabaseClient
+            .from('plans')
+            .insert({ title, description: '', status: 'open' })
+            .select('*')
+            .single();
+          if (nErr) { setTplWarn(`Failed to create incident: ${nErr.message}`); closeSysModal(); return; }
+
+          // Clone tasks
+          const { data: srcTasks } = await supabaseClient
+            .from('tasks').select('*').eq('plan_id', templatePlanId)
+            .order('task_number', { ascending: true });
+          const taskMap = new Map();
+          for (const st of (srcTasks || [])) {
+            const { data: nt, error } = await supabaseClient
+              .from('tasks')
+              .insert({
+                plan_id: newPlan.id,
+                task_number: st.task_number,
+                title: st.title,
+                expected_minutes: st.expected_minutes ?? null,
+                branch_group_id: st.branch_group_id || null,
+                branch_seq: st.branch_seq ?? null,
+                predicted_time: null,
+                completed_at: null,
+                is_na: false,
+                position_x: st.position_x,
+                position_y: st.position_y
+              })
+              .select('*')
+              .single();
+            if (error) { setTplWarn(`Clone task failed: ${error.message}`); return; }
+            taskMap.set(st.id, nt.id);
+          }
+          // Clone subtasks
+          const srcTaskIds = (srcTasks || []).map(t=>t.id);
+          if (srcTaskIds.length){
+            const { data: srcSubs } = await supabaseClient
+              .from('subtasks').select('*').in('task_id', srcTaskIds)
+              .order('created_at', { ascending: true });
+            for (const ss of (srcSubs || [])){
+              const newTaskId = taskMap.get(ss.task_id);
+              if (!newTaskId) continue;
+              await supabaseClient.from('subtasks').insert({
+                task_id: newTaskId,
+                sub_letter: ss.sub_letter,
+                title: ss.title,
+                completed_at: null
+              });
+            }
+          }
+          // Clone edges
+          const { data: srcEdges } = await supabaseClient
+            .from('edges').select('*').eq('plan_id', templatePlanId)
+            .order('created_at', { ascending: true });
+          for (const se of (srcEdges || [])){
+            const from = taskMap.get(se.from_task_id);
+            const to = taskMap.get(se.to_task_id);
+            if (!from || !to) continue;
+            await supabaseClient.from('edges').insert({
+              plan_id: newPlan.id,
+              from_task_id: from,
+              to_task_id: to,
+              label: se.label || ''
+            });
+          }
+          closeSysModal();
+          activePlan = newPlan;
+          setView('open');
+          await refreshAll();
+          await loadEverythingForActivePlan();
+        }}
+      ]
+    });
+    setTimeout(()=>document.getElementById('useTplTitle')?.focus(), 0);
+  }
+  window.useTemplateAsIncident = useTemplateAsIncident;
 
 
     async function closePlan() {
@@ -2942,7 +3434,15 @@ window.recomputePredictedTimes = recomputePredictedTimes;
 
 // ===== Boot =====
   setView('open');
-  loadPlans().then(async () => { if (activePlan) { await loadEverythingForActivePlan(); await loadPlanSettings(); await startViewerPresence(); } });
+  loadPlans().then(async () => {
+    if (activePlan) {
+      await loadEverythingForActivePlan();
+      if (!isTemplateMode()){
+        await loadPlanSettings();
+        await startViewerPresence();
+      }
+    }
+  });
 </script>
 
 
