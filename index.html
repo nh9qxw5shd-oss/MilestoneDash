@@ -485,7 +485,7 @@
 <header>
   <strong>Milestone Plan Dashboard</strong>
   <div class="right">
-    <button class="btn-ghost" id="btnViewOpen" onclick="setView('open')">Open</button>
+    <button class="btn-ghost" id="btnViewOpen" onclick="goToOpenView()">Open</button>
     <button class="btn-ghost" id="btnViewTemplates" onclick="setView('templates')">Templates</button>
     <button class="btn-ghost" id="btnViewMemory" onclick="setView('memory')">Memory</button>
     <button class="btn" onclick="refreshAll()">Refresh</button><button id="publishBtn" class="btn btn-secondary" style="margin-left:8px">Publish</button>
@@ -1526,13 +1526,6 @@ function renderBranchTogglesForOrigin(originTaskId) {
   }
 
   async function setView(view) {
-    // If user is leaving the template editor by clicking "Open", switch off the template
-    // and refresh open incidents so the open view is meaningful.
-    const wasTemplateMode = isTemplateMode();
-    if (view === 'open' && wasTemplateMode) {
-      activePlan = null;
-    }
-
     currentView = view;
     document.getElementById('openView').style.display = (view === 'open') ? '' : 'none';
     document.getElementById('memoryView').style.display = (view === 'memory') ? '' : 'none';
@@ -1547,14 +1540,23 @@ function renderBranchTogglesForOrigin(originTaskId) {
 
     if (view === 'memory') loadMemory();
     if (view === 'templates') loadTemplates();
-    if (view === 'open' && wasTemplateMode) {
-      // Reload incident list and pick one
+  }
+  window.setView = setView;
+
+  // Wired to the "Open" nav button. If currently editing a template, drop the
+  // template and reload incidents; otherwise just show the open view.
+  async function goToOpenView(){
+    if (isTemplateMode()){
+      activePlan = null;
+      await setView('open');
       await loadPlans();
       if (activePlan) await loadEverythingForActivePlan();
       applyChromeForActivePlan();
+      return;
     }
+    await setView('open');
   }
-  window.setView = setView;
+  window.goToOpenView = goToOpenView;
   function updateProgressKpis() {
     const total = tasksCache.length;
     const done = tasksCache.filter(t => !!t.completed_at).length;
