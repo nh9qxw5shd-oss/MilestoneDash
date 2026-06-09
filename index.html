@@ -478,6 +478,171 @@
   letter-spacing:.02em;
 }
 
+/* ===== Read-only share view ===== */
+body.share-mode header, body.share-mode .tabs, body.share-mode main { display:none !important; }
+body.share-mode { background:#eef2f7; }
+#shareView{ min-height:100vh; }
+
+@keyframes shareFadeUp{ from{ opacity:0; transform:translateY(16px); } to{ opacity:1; transform:none; } }
+@keyframes sharePulseGreen{ 0%{ box-shadow:0 0 0 0 rgba(34,197,94,.6); } 70%{ box-shadow:0 0 0 8px rgba(34,197,94,0); } 100%{ box-shadow:0 0 0 0 rgba(34,197,94,0); } }
+@keyframes sharePulseBlue{ 0%{ box-shadow:0 0 0 0 rgba(37,99,235,.55); } 70%{ box-shadow:0 0 0 10px rgba(37,99,235,0); } 100%{ box-shadow:0 0 0 0 rgba(37,99,235,0); } }
+@keyframes shareSpin{ to{ transform:rotate(360deg); } }
+
+#shareView.share-noanim .shareCard,
+#shareView.share-noanim .tlItem,
+#shareView.share-noanim .tlBranchHead,
+#shareView.share-noanim .shareHeroInner > * { animation:none !important; }
+
+@media (prefers-reduced-motion: reduce){
+  #shareView *{ animation:none !important; transition:none !important; }
+}
+
+.shareHero{
+  background:
+    radial-gradient(1100px 480px at 12% -12%, rgba(59,130,246,.55) 0%, transparent 60%),
+    radial-gradient(900px 420px at 88% -4%, rgba(139,92,246,.45) 0%, transparent 55%),
+    linear-gradient(135deg, #0b1220 0%, #111c3a 55%, #1e1b4b 100%);
+  color:#f8fafc;
+  padding:2.6rem 1.25rem 4.6rem;
+  position:relative;
+  overflow:hidden;
+}
+.shareHeroInner{
+  max-width:1100px; margin:0 auto;
+  display:flex; gap:2rem; align-items:center; justify-content:space-between; flex-wrap:wrap;
+}
+.shareHeroInner > *{ animation: shareFadeUp .6s both; }
+.shareLive{
+  display:inline-flex; align-items:center; gap:.45rem;
+  font-size:.78rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase;
+  color:#c7d2fe; background:rgba(255,255,255,.08);
+  border:1px solid rgba(255,255,255,.16);
+  padding:.3rem .75rem; border-radius:999px;
+}
+.liveDot{ width:8px; height:8px; border-radius:50%; background:#22c55e; animation: sharePulseGreen 1.8s infinite; }
+.liveDot.final{ background:#94a3b8; animation:none; }
+.shareTitle{ font-size:clamp(1.6rem, 3.5vw, 2.4rem); font-weight:900; margin:.7rem 0 .35rem; letter-spacing:-.02em; line-height:1.15; }
+.shareDesc{ color:#cbd5e1; max-width:640px; margin:0; }
+.shareBadges{ margin-top:.8rem; display:flex; gap:.45rem; flex-wrap:wrap; }
+.shareBadges .pill{ margin-left:0; }
+
+.ringWrap{ display:flex; align-items:center; gap:1.1rem; }
+.ringBox{ position:relative; width:136px; height:136px; }
+.ringSvg{ width:136px; height:136px; transform:rotate(-90deg); display:block; }
+.ringBg{ fill:none; stroke:rgba(255,255,255,.14); stroke-width:11; }
+.ringFg{ fill:none; stroke:url(#shareGrad); stroke-width:11; stroke-linecap:round; transition: stroke-dashoffset 1.1s cubic-bezier(.22,1,.36,1); }
+.ringNum{
+  position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;
+  font-weight:900; font-size:1.6rem; letter-spacing:-.02em;
+}
+.ringNum .cap{ font-size:.68rem; font-weight:800; letter-spacing:.1em; text-transform:uppercase; color:#a5b4fc; }
+.ringSide{ font-size:.95rem; color:#cbd5e1; }
+.ringSide b{ color:#f8fafc; font-size:1.1rem; }
+
+.shareBody{ max-width:1100px; margin:-3.2rem auto 0; padding:0 1.25rem 3rem; position:relative; z-index:2; }
+.shareCards{ display:grid; grid-template-columns:repeat(auto-fit, minmax(215px, 1fr)); gap:.9rem; margin-bottom:1.1rem; }
+.shareCard{
+  background:rgba(255,255,255,.94);
+  backdrop-filter:blur(8px); -webkit-backdrop-filter:blur(8px);
+  border:1px solid #e2e8f0; border-radius:1.1rem;
+  padding:.95rem 1.05rem;
+  box-shadow:0 8px 24px rgba(15,23,42,.08);
+  animation: shareFadeUp .55s both;
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.shareCard:hover{ transform:translateY(-2px); box-shadow:0 14px 30px rgba(15,23,42,.12); }
+.shareCard .lbl{ font-size:.72rem; font-weight:800; letter-spacing:.07em; text-transform:uppercase; color:#64748b; margin-bottom:.35rem; }
+.shareCard .val{ font-weight:900; font-size:1.02rem; color:#0f172a; line-height:1.35; }
+.shareCard .sub{ color:#64748b; font-size:.85rem; margin-top:.2rem; }
+
+.shareTimelineCard{
+  background:#fff; border:1px solid #e2e8f0; border-radius:1.25rem;
+  padding:1.3rem 1.25rem 1.1rem;
+  box-shadow:0 8px 24px rgba(15,23,42,.06);
+}
+.shareTlHead{ display:flex; justify-content:space-between; align-items:center; gap:.75rem; flex-wrap:wrap; margin-bottom:1rem; }
+.shareTlHead h2{ margin:0; font-size:1.15rem; letter-spacing:-.01em; }
+.shareChips{ display:flex; gap:.45rem; flex-wrap:wrap; }
+.shareChip{
+  background:#fff; border:1px solid #e2e8f0; border-radius:999px;
+  padding:.38rem .85rem; font-weight:800; font-size:.83rem; cursor:pointer; color:#475569;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.shareChip:hover{ border-color:#94a3b8; }
+.shareChip.active{ background:#0f172a; color:#fff; border-color:#0f172a; }
+
+.shareTimeline{ list-style:none; margin:0; padding:.25rem 0 0; position:relative; }
+.shareTimeline::before{
+  content:''; position:absolute; left:19px; top:10px; bottom:14px; width:2px;
+  background:linear-gradient(#c7d2fe, #e2e8f0); border-radius:2px;
+}
+.shareTimeline[data-filter="open"] .tlItem.done{ display:none; }
+.shareTimeline[data-filter="open"] .tlItem.na{ display:none; }
+.shareTimeline[data-filter="done"] .tlItem:not(.done){ display:none; }
+
+.tlItem{ position:relative; padding:0 0 1rem 56px; animation: shareFadeUp .55s both; }
+.tlBranchHead{ position:relative; padding:.15rem 0 .85rem 56px; animation: shareFadeUp .55s both; }
+.tlBranchHead .bh{
+  display:inline-flex; gap:.45rem; align-items:center;
+  background:#eef2ff; color:#3730a3; border:1px solid #c7d2fe;
+  padding:.35rem .7rem; border-radius:999px; font-weight:800; font-size:.83rem;
+}
+.tlMarker{
+  position:absolute; left:0; top:2px; width:40px; height:40px; border-radius:50%;
+  display:flex; align-items:center; justify-content:center;
+  font-weight:900; font-size:.85rem;
+  background:#fff; border:2px solid #e2e8f0; color:#64748b; z-index:1;
+}
+.tlItem.done .tlMarker{ background:#16a34a; border-color:#16a34a; color:#fff; }
+.tlItem.current .tlMarker{ background:#2563eb; border-color:#2563eb; color:#fff; animation: sharePulseBlue 2s infinite; }
+.tlItem.na .tlMarker{ background:#f1f5f9; }
+.tlItem.na{ opacity:.55; }
+.tlCard{
+  background:#fff; border:1px solid #e2e8f0; border-radius:1rem;
+  padding:.8rem .95rem;
+  box-shadow:0 1px 2px rgba(15,23,42,.05);
+  transition: transform .18s ease, box-shadow .18s ease;
+}
+.tlCard:hover{ transform:translateY(-2px); box-shadow:0 10px 24px rgba(15,23,42,.10); }
+.tlItem.rag-green .tlCard{ border-left:4px solid #16a34a; }
+.tlItem.rag-amber .tlCard{ border-left:4px solid #f59e0b; }
+.tlItem.rag-red .tlCard{ border-left:4px solid #ef4444; }
+.tlItem.current .tlCard{ border-color:#bfdbfe; box-shadow:0 0 0 3px rgba(37,99,235,.10); }
+.tlHead{ display:flex; align-items:baseline; gap:.5rem; flex-wrap:wrap; }
+.tlNum{ font-size:.75rem; font-weight:900; color:#64748b; background:#f1f5f9; border-radius:.45rem; padding:.1rem .4rem; }
+.tlTitle{ font-weight:800; }
+.tlMeta{ margin-top:.3rem; font-size:.88rem; color:#64748b; display:flex; align-items:center; gap:.35rem; flex-wrap:wrap; }
+.tlSubs{ margin-top:.55rem; border-top:1px dashed #e2e8f0; padding-top:.5rem; }
+.tlSubs summary{ cursor:pointer; font-size:.84rem; font-weight:800; color:#475569; user-select:none; }
+.tlSubs summary:hover{ color:#0f172a; }
+.tlSubRow{ display:flex; gap:.5rem; align-items:baseline; padding:.32rem 0 0 .25rem; font-size:.9rem; }
+.tlSubMark{ font-weight:900; font-size:.78rem; min-width:18px; text-align:center; }
+.tlSubMark.done{ color:#16a34a; }
+.tlSubMark.open{ color:#94a3b8; }
+.tlSubTitle{ font-weight:600; color:#334155; }
+.tlSubRow .when{ color:#94a3b8; font-size:.8rem; }
+
+.shareFooter{ text-align:center; color:#94a3b8; font-size:.83rem; margin-top:1.4rem; }
+
+.shareLoading{
+  min-height:100vh; display:flex; flex-direction:column; gap:1rem;
+  align-items:center; justify-content:center; color:#475569; font-weight:700;
+}
+.shareSpinner{
+  width:38px; height:38px; border-radius:50%;
+  border:4px solid #e2e8f0; border-top-color:#2563eb;
+  animation: shareSpin .8s linear infinite;
+}
+
+@media (max-width: 760px){
+  .shareHero{ padding:2rem 1rem 4.4rem; }
+  .shareHeroInner{ gap:1.25rem; }
+  .shareBody{ padding:0 .85rem 2.4rem; }
+  .tlItem, .tlBranchHead{ padding-left:50px; }
+  .tlMarker{ width:36px; height:36px; }
+  .shareTimeline::before{ left:17px; }
+}
+
 </style>
 </head>
 <body>
@@ -489,6 +654,7 @@
     <button class="btn-ghost" id="btnViewTemplates" onclick="setView('templates')">Templates</button>
     <button class="btn-ghost" id="btnViewMemory" onclick="setView('memory')">Memory</button>
     <button class="btn" onclick="refreshAll()">Refresh</button><button id="publishBtn" class="btn btn-secondary" style="margin-left:8px">Publish</button>
+    <button class="btn" id="shareBtn" onclick="copyShareLink()">&#128279; Share</button>
     <button class="btn-primary" onclick="createPlanPrompt()">New Plan</button>
     <button class="btn-danger" id="btnCloseIncident" onclick="closePlan()">Close Incident</button>
   </div>
@@ -623,6 +789,9 @@
     </div>
   </div>
 </main>
+
+<!-- Read-only share view (rendered when ?share=<planId> is in the URL) -->
+<div id="shareView" style="display:none"></div>
 
 <script>
   // ===== Supabase config =====
@@ -1514,6 +1683,8 @@ function renderBranchTogglesForOrigin(originTaskId) {
     if (tabs) tabs.style.display = (tpl || currentView !== 'open') ? 'none' : '';
     if (closeBtn) closeBtn.style.display = tpl ? 'none' : '';
     if (publishBtn) publishBtn.style.display = tpl ? 'none' : '';
+    const shareBtn = document.getElementById('shareBtn');
+    if (shareBtn) shareBtn.style.display = tpl ? 'none' : '';
     if (settingsGrid) settingsGrid.style.display = tpl ? 'none' : '';
     if (incidentMeta) incidentMeta.style.display = tpl ? 'none' : '';
     if (templateMeta) {
@@ -3434,17 +3605,434 @@ window.recomputePredictedTimes = recomputePredictedTimes;
 
 
 
-// ===== Boot =====
-  setView('open');
-  loadPlans().then(async () => {
-    if (activePlan) {
-      await loadEverythingForActivePlan();
-      if (!isTemplateMode()){
+// ===== Share link (read-only live view) =====
+  function getShareUrl(){
+    if (!activePlan) return null;
+    const base = location.href.split(/[?#]/)[0];
+    return base + '?share=' + encodeURIComponent(activePlan.id);
+  }
+
+  async function copyShareLink(){
+    const btn = document.getElementById('shareBtn');
+    const flash = (txt) => {
+      if (!btn) return;
+      const orig = '\u{1F517} Share';
+      btn.textContent = txt;
+      setTimeout(() => { btn.textContent = orig; }, 2000);
+    };
+
+    const url = getShareUrl();
+    if (!url){ flash('No plan open'); return; }
+
+    try {
+      await navigator.clipboard.writeText(url);
+    } catch (e) {
+      const ta = document.createElement('textarea');
+      ta.value = url;
+      ta.setAttribute('readonly','');
+      ta.style.position = 'fixed';
+      ta.style.left = '-9999px';
+      ta.style.top = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch(e2) { /* ignore */ }
+      document.body.removeChild(ta);
+    }
+    flash('✓ Link copied');
+  }
+  window.copyShareLink = copyShareLink;
+
+  // ===== Share mode (viewer-only page) =====
+  let sharePlanId = null;
+  let shareFilter = 'all';
+  let shareViewerCount = null;
+  let shareLastUpdated = null;
+  let sharePrevPct = 0;
+  let shareFirstRender = true;
+  let shareOpenSubs = new Set();
+
+  window.shareToggleSubs = function(taskId, el){
+    if (el && el.open) shareOpenSubs.add(taskId);
+    else shareOpenSubs.delete(taskId);
+  };
+
+  window.setShareFilter = function(f){
+    shareFilter = f;
+    renderShareView();
+  };
+
+  function isShareMode(){
+    return document.body.classList.contains('share-mode');
+  }
+
+  async function fetchShareViewerCount(){
+    if (!activePlan) return null;
+    try{
+      const sinceIso = new Date(Date.now() - VIEWER_TTL_MS).toISOString();
+      const { data, error } = await supabaseClient
+        .from('plan_viewers')
+        .select('viewer_id')
+        .eq('plan_id', activePlan.id)
+        .gte('last_seen', sinceIso);
+      if (error) throw error;
+      return new Set((data||[]).map(r => r.viewer_id)).size;
+    }catch(e){
+      return null;
+    }
+  }
+
+  function shareComputeCurrentTaskId(){
+    const trackable = getTrackableTaskIds();
+    const pending = tasksCache
+      .filter(x => trackable.has(x.id) && !x.completed_at && !x.is_na)
+      .sort((a,b) => Number(a.task_number||0) - Number(b.task_number||0));
+    return pending.length ? pending[0].id : null;
+  }
+
+  function shareComputeWorkStatus(){
+    const trackable = getTrackableTaskIds();
+    const completedPred = tasksCache
+      .filter(t => trackable.has(t.id) && t.completed_at && t.predicted_time)
+      .sort((a,b) => Number(a.task_number||0) - Number(b.task_number||0));
+
+    if (!completedPred.length){
+      return { text: 'No checkpoints yet', cls: 'pill-branch', detail: 'Awaiting first completed milestone.' };
+    }
+    const lastTask = completedPred[completedPred.length-1];
+    const diff = minutesDiff(lastTask.completed_at, lastTask.predicted_time); // + late, - early
+    const detail = `Last checkpoint: ${getTaskDisplayNumber(lastTask)} completed ${fmtDT(lastTask.completed_at)}`;
+    if (diff === 0) return { text: 'On target', cls: 'pill-green', detail };
+    if (diff < 0) return { text: `${Math.abs(diff)} min ahead`, cls: 'pill-green', detail };
+    return { text: `${diff} min behind`, cls: (diff <= 10 ? 'pill-amber' : 'pill-red'), detail };
+  }
+
+  function shareAnimatePct(el, from, to){
+    if (!el) return;
+    const ms = 900;
+    const start = performance.now();
+    function tick(now){
+      const p = Math.min(1, (now - start) / ms);
+      const eased = 1 - Math.pow(1 - p, 3);
+      el.textContent = Math.round(from + (to - from) * eased) + '%';
+      if (p < 1) requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+
+  function renderShareNotFound(){
+    const sv = document.getElementById('shareView');
+    sv.innerHTML = `
+      <div class="shareLoading">
+        <div style="font-size:2rem;">&#128269;</div>
+        <div>This plan could not be found.</div>
+        <div class="muted" style="font-weight:600;">The link may be out of date, or the plan was removed.</div>
+      </div>`;
+  }
+
+  function renderShareView(){
+    const sv = document.getElementById('shareView');
+    if (!sv || !activePlan) return;
+
+    const plan = activePlan;
+    const s = (settingsCache && settingsCache[plan.id]) ? settingsCache[plan.id] : {};
+    const tpl = plan.status === 'template';
+    const closed = plan.status === 'closed';
+
+    const trackable = getTrackableTaskIds();
+    const total = trackable.size;
+    const done = tasksCache.filter(t => trackable.has(t.id) && !!t.completed_at).length;
+    const pct = total ? Math.round((done/total)*100) : 0;
+    const currentId = shareComputeCurrentTaskId();
+    const ws = shareComputeWorkStatus();
+
+    const updatedTxt = shareLastUpdated
+      ? shareLastUpdated.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit', second:'2-digit' })
+      : '--:--';
+
+    const liveChip = closed
+      ? `<span class="shareLive"><span class="liveDot final"></span> Final &middot; plan closed</span>`
+      : `<span class="shareLive"><span class="liveDot"></span> Live &middot; updated ${escapeHtml(updatedTxt)}</span>`;
+
+    const statusPill = closed
+      ? `<span class="pill pill-na">Closed</span>`
+      : tpl
+        ? `<span class="pill pill-branch">Template</span>`
+        : `<span class="pill pill-green">In progress</span>`;
+
+    // ---- KPI cards ----
+    const cards = [];
+    cards.push(`
+      <div class="shareCard">
+        <div class="lbl">Status</div>
+        <div class="val">${closed ? 'Closed' : (tpl ? 'Template' : 'In progress')}</div>
+        <div class="sub">${s.start_time ? 'Started ' + escapeHtml(fmtDT(s.start_time)) : 'Start time not set'}</div>
+      </div>`);
+    cards.push(`
+      <div class="shareCard">
+        <div class="lbl">Work status</div>
+        <div class="val"><span class="pill ${ws.cls}" style="margin-left:0;">${escapeHtml(ws.text)}</span></div>
+        <div class="sub">${escapeHtml(ws.detail)}</div>
+      </div>`);
+    cards.push(`
+      <div class="shareCard">
+        <div class="lbl">Milestones</div>
+        <div class="val">${done} / ${total} complete</div>
+        <div class="sub">${Math.max(0, total - done)} remaining</div>
+      </div>`);
+    cards.push(`
+      <div class="shareCard">
+        <div class="lbl">Viewers</div>
+        <div class="val">${shareViewerCount === null ? '&mdash;' : shareViewerCount}</div>
+        <div class="sub">watching now</div>
+      </div>`);
+
+    const fms = s.fms_ref || '', ccil = s.ccil_ref || '', tda = s.tda_ref || '';
+    if (fms || ccil || tda){
+      cards.push(`
+        <div class="shareCard">
+          <div class="lbl">References</div>
+          <div class="val" style="font-size:.92rem;">
+            ${fms ? 'FMS ' + escapeHtml(fms) + '<br/>' : ''}
+            ${ccil ? 'CCIL ' + escapeHtml(ccil) + '<br/>' : ''}
+            ${tda ? 'TDA ' + escapeHtml(tda) : ''}
+          </div>
+        </div>`);
+    }
+    const tpic = [s.tpic_name, s.tpic_phone].filter(Boolean).join(' &middot; ');
+    const mmic = [s.mmic_name, s.mmic_phone].filter(Boolean).join(' &middot; ');
+    if (tpic || mmic){
+      cards.push(`
+        <div class="shareCard">
+          <div class="lbl">Command</div>
+          <div class="val" style="font-size:.92rem;">
+            ${tpic ? 'TPIC: ' + escapeHtml([s.tpic_name, s.tpic_phone].filter(Boolean).join(' ')) + '<br/>' : ''}
+            ${mmic ? 'MMIC: ' + escapeHtml([s.mmic_name, s.mmic_phone].filter(Boolean).join(' ')) : ''}
+          </div>
+        </div>`);
+    }
+
+    const cardsHtml = cards.map((c, i) => c.replace('class="shareCard"', `class="shareCard" style="animation-delay:${i*70}ms"`)).join('');
+
+    // ---- Timeline ----
+    const items = [];
+    let lastGroupKey = null;
+    let idx = 0;
+
+    tasksCache.forEach(t => {
+      const meta = branchTaskMeta.get(t.id);
+      const gk = meta ? meta.groupKey : null;
+
+      if (gk !== lastGroupKey){
+        if (gk){
+          const g = branchGroups.get(gk);
+          const active = branchActiveGroups.has(gk);
+          items.push(`
+            <li class="tlBranchHead" style="animation-delay:${idx*45}ms">
+              <span class="bh">&#10550; Branch from step ${escapeHtml(String(g?.originTaskNumber ?? '?'))}: ${escapeHtml(g?.label || 'Branch')}</span>
+              <span class="pill ${active ? 'pill-amber' : 'pill-branch'}">${active ? 'Active' : 'Standby'}</span>
+            </li>`);
+          idx++;
+        }
+        lastGroupKey = gk;
+      }
+
+      const isDone = !!t.completed_at;
+      const isNa = !!t.is_na;
+      const isCurrent = !tpl && !isDone && !isNa && t.id === currentId;
+      const hasPred = !tpl && !!t.predicted_time;
+      const rag = (!tpl && !isNa) ? ragClassForTask(t) : '';
+      const stateCls = isNa ? 'na' : (isDone ? 'done' : (isCurrent ? 'current' : 'upcoming'));
+      const marker = isDone ? '&#10003;' : (isNa ? '&ndash;' : escapeHtml(getTaskDisplayNumber(t)));
+
+      let metaRow = '';
+      if (!tpl){
+        if (isDone){
+          const v = hasPred ? minutesBetween(t.completed_at, t.predicted_time) : null;
+          metaRow = `Completed ${escapeHtml(fmtDT(t.completed_at))} ${v !== null ? variancePill(v) : ''}`;
+        } else if (isNa){
+          metaRow = `Not applicable on the current line`;
+        } else if (hasPred){
+          const delta = isCurrent ? minutesBetween(new Date().toISOString(), t.predicted_time) : null;
+          metaRow = `Predicted ${escapeHtml(fmtDT(t.predicted_time))} ${delta !== null ? duePill(delta) : ''}`;
+        } else {
+          metaRow = `Predicted &mdash; not set`;
+        }
+      }
+
+      const subList = (subtasksCache && Array.isArray(subtasksCache[t.id])) ? subtasksCache[t.id] : [];
+      let subsHtml = '';
+      if (subList.length){
+        const subDone = subList.filter(x => !!x.completed_at).length;
+        const rows = subList.map(x => {
+          const sd = !!x.completed_at;
+          return `
+            <div class="tlSubRow">
+              <span class="tlSubMark ${sd ? 'done' : 'open'}">${sd ? '&#10003;' : '&#9675;'}</span>
+              <span class="tlSubTitle">${escapeHtml(String(t.task_number))}${escapeHtml(x.sub_letter || '')} &middot; ${escapeHtml(x.title)}</span>
+              ${(!tpl && sd) ? `<span class="when">${escapeHtml(fmtDT(x.completed_at))}</span>` : ''}
+            </div>`;
+        }).join('');
+        subsHtml = `
+          <details class="tlSubs" ${shareOpenSubs.has(t.id) ? 'open' : ''} ontoggle="shareToggleSubs('${escapeHtml(t.id)}', this)">
+            <summary>${subList.length} subtask${subList.length === 1 ? '' : 's'} &middot; ${subDone} done</summary>
+            ${rows}
+          </details>`;
+      }
+
+      items.push(`
+        <li class="tlItem ${stateCls} ${rag}" style="animation-delay:${idx*45}ms">
+          <div class="tlMarker">${marker}</div>
+          <div class="tlCard">
+            <div class="tlHead">
+              <span class="tlNum">${escapeHtml(getTaskDisplayNumber(t))}</span>
+              <span class="tlTitle">${escapeHtml(t.title)}</span>
+              ${meta ? `<span class="pill pill-branch">${escapeHtml(meta.label)}</span>` : ''}
+              ${isNa ? `<span class="pill pill-na">N/A</span>` : ''}
+              ${isCurrent ? `<span class="pill pill-amber">In progress</span>` : ''}
+            </div>
+            ${metaRow ? `<div class="tlMeta">${metaRow}</div>` : ''}
+            ${subsHtml}
+          </div>
+        </li>`);
+      idx++;
+    });
+
+    const chips = [
+      { id: 'all', label: 'All' },
+      { id: 'open', label: 'Remaining' },
+      { id: 'done', label: 'Completed' },
+    ].map(c => `<button class="shareChip ${shareFilter === c.id ? 'active' : ''}" onclick="setShareFilter('${c.id}')">${c.label}</button>`).join('');
+
+    const C = 2 * Math.PI * 52;
+
+    sv.innerHTML = `
+      <div class="shareHero">
+        <div class="shareHeroInner">
+          <div style="flex:1; min-width:260px;">
+            ${liveChip}
+            <h1 class="shareTitle">${escapeHtml(plan.title || 'Milestone Plan')}</h1>
+            ${plan.description ? `<p class="shareDesc">${escapeHtml(plan.description)}</p>` : ''}
+            <div class="shareBadges">${statusPill}</div>
+          </div>
+          <div class="ringWrap">
+            <div class="ringBox">
+              <svg class="ringSvg" viewBox="0 0 120 120" aria-hidden="true">
+                <defs>
+                  <linearGradient id="shareGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                    <stop offset="0%" stop-color="#60a5fa"/>
+                    <stop offset="100%" stop-color="#a78bfa"/>
+                  </linearGradient>
+                </defs>
+                <circle class="ringBg" cx="60" cy="60" r="52"/>
+                <circle class="ringFg" id="shareRingFg" cx="60" cy="60" r="52"
+                  stroke-dasharray="${C}" stroke-dashoffset="${C * (1 - sharePrevPct / 100)}"/>
+              </svg>
+              <div class="ringNum"><span id="sharePctNum">${sharePrevPct}%</span><span class="cap">complete</span></div>
+            </div>
+            <div class="ringSide"><b>${done}</b> of <b>${total}</b><br/>milestones done</div>
+          </div>
+        </div>
+      </div>
+      <div class="shareBody">
+        <div class="shareCards">${cardsHtml}</div>
+        <div class="shareTimelineCard">
+          <div class="shareTlHead">
+            <h2>Milestones</h2>
+            <div class="shareChips">${chips}</div>
+          </div>
+          <ol class="shareTimeline" data-filter="${escapeHtml(shareFilter)}">
+            ${items.join('') || '<li class="tlItem"><div class="tlCard muted">No milestones yet.</div></li>'}
+          </ol>
+        </div>
+        <div class="shareFooter">Read-only live view &middot; refreshes automatically &middot; Milestone Plan Dashboard</div>
+      </div>`;
+
+    // Animate ring + percentage from the previous value
+    const ring = document.getElementById('shareRingFg');
+    const pctEl = document.getElementById('sharePctNum');
+    const fromPct = sharePrevPct;
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (ring) ring.style.strokeDashoffset = String(C * (1 - pct / 100));
+        shareAnimatePct(pctEl, fromPct, pct);
+      });
+    });
+    sharePrevPct = pct;
+
+    if (shareFirstRender){
+      shareFirstRender = false;
+    } else {
+      sv.classList.add('share-noanim');
+    }
+  }
+
+  async function refreshShareData(first){
+    try{
+      const { data: plan, error } = await supabaseClient
+        .from('plans')
+        .select('*')
+        .eq('id', sharePlanId)
+        .maybeSingle();
+      if (error) throw error;
+      if (!plan){ renderShareNotFound(); return; }
+
+      activePlan = plan;
+      await loadTasks();
+      await loadEdges();
+      recomputeBranchCache();
+      await loadBranchStates();
+      await loadSubtasks();
+      if (plan.status !== 'template'){
         await loadPlanSettings();
-        await startViewerPresence();
+        await recomputePredictedTimes(false);
+        if (first) await startViewerPresence(); else await touchViewer();
+        shareViewerCount = await fetchShareViewerCount();
+      }
+      shareLastUpdated = new Date();
+      document.title = (plan.title ? plan.title + ' · ' : '') + 'Live view';
+      renderShareView();
+    }catch(e){
+      console.warn('Share view refresh failed', e);
+      if (first){
+        const sv = document.getElementById('shareView');
+        sv.innerHTML = `
+          <div class="shareLoading">
+            <div style="font-size:2rem;">&#9888;&#65039;</div>
+            <div>Could not load this view.</div>
+            <div class="muted" style="font-weight:600;">Check your connection and refresh the page.</div>
+          </div>`;
       }
     }
-  });
+  }
+
+  async function bootShareView(planId){
+    sharePlanId = planId;
+    const sv = document.getElementById('shareView');
+    sv.style.display = '';
+    sv.innerHTML = `<div class="shareLoading"><div class="shareSpinner"></div><div>Loading live view&hellip;</div></div>`;
+    await refreshShareData(true);
+    // Re-fetch data every 45s; re-render every 60s so overdue/RAG pills stay honest.
+    setInterval(() => refreshShareData(false), 45000);
+    setInterval(() => { if (activePlan) renderShareView(); }, 60000);
+  }
+
+// ===== Boot =====
+  const shareParam = new URLSearchParams(location.search).get('share');
+  if (shareParam) {
+    document.body.classList.add('share-mode');
+    bootShareView(shareParam);
+  } else {
+    setView('open');
+    loadPlans().then(async () => {
+      if (activePlan) {
+        await loadEverythingForActivePlan();
+        if (!isTemplateMode()){
+          await loadPlanSettings();
+          await startViewerPresence();
+        }
+      }
+    });
+  }
 </script>
 
 
