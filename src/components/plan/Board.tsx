@@ -21,6 +21,7 @@ import type { PlanSettings, Subtask, Task } from "@/lib/plan/types";
 import { usePlanData, useViewers } from "@/lib/plan/usePlan";
 import { BranchHeader, TaskRow, type Mode, type TaskHandlers } from "./TaskRow";
 import TaskEditDrawer from "./TaskEditDrawer";
+import { useSaveAsTemplate } from "./useSaveAsTemplate";
 
 const NO_KEYS: string[] = [];
 const STANDALONE = "https://milestone.derbycontrol.co.uk";
@@ -211,6 +212,8 @@ function PlanView({ data, reload }: { data: PlanData; reload: () => Promise<void
     }
   }
 
+  const toTemplate = useSaveAsTemplate();
+
   async function clone() {
     const title = await dialog.prompt({ title: "Clone plan", label: "New plan title", initial: "Cloned plan", required: true, confirmLabel: "Clone" });
     if (!title?.trim()) return;
@@ -334,13 +337,17 @@ function PlanView({ data, reload }: { data: PlanData; reload: () => Promise<void
 
   return (
     <>
-      {mode === "incident" && hub.open.length > 1 && (
-        <nav className="mb-4 flex gap-1.5 overflow-x-auto pb-1" aria-label="Open incidents">
+      {mode === "incident" && (
+        <nav className="mb-4 flex items-center gap-1.5 overflow-x-auto pb-1" aria-label="Open incidents">
+          <span className="lbl mb-0 mr-1 shrink-0">Open</span>
           {hub.open.map((p) => (
-            <Link key={p.id} href={`/?plan=${p.id}`} className="chip shrink-0" aria-pressed={p.id === plan.id}>
+            <Link key={p.id} href={`/?plan=${p.id}`} className="chip shrink-0" aria-pressed={p.id === plan.id} title={p.created_at ? `Opened ${fmtDT(p.created_at)}` : undefined}>
               {p.title}
             </Link>
           ))}
+          <button className="chip shrink-0" onClick={() => requestAction("new-plan")}>
+            <Plus size={13} /> New plan
+          </button>
         </nav>
       )}
 
@@ -383,8 +390,18 @@ function PlanView({ data, reload }: { data: PlanData; reload: () => Promise<void
               </button>
             )}
             {mode === "closed" && (
-              <button className="btn btn-primary" onClick={clone}>
-                <Archive size={15} /> Clone
+              <>
+                <button className="btn" onClick={() => toTemplate(plan)} title="Keep this plan as a reusable template">
+                  <LayoutTemplate size={15} /> Save as template
+                </button>
+                <button className="btn btn-primary" onClick={clone}>
+                  <Archive size={15} /> Clone
+                </button>
+              </>
+            )}
+            {mode !== "closed" && (
+              <button className="btn" onClick={() => requestAction("new-plan")} title="Start another incident or template; open plans sit side by side as tabs">
+                <Plus size={15} /> New plan
               </button>
             )}
           </>

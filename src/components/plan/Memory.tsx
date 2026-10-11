@@ -1,18 +1,20 @@
 "use client";
 
 // Memory: closed plans, read-only, grouped by the month they closed (latest month open). View opens
-// the plan on the board in read-only mode; Clone starts a fresh open plan from it.
+// the plan on the board in read-only mode; Clone starts a fresh open plan from it; Save as
+// template keeps a plan that worked well as a reusable framework.
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Archive, ChevronDown, Copy, Eye, Search } from "lucide-react";
+import { Archive, ChevronDown, Copy, Eye, LayoutTemplate, Search } from "lucide-react";
 import { Card, EmptyState, PageHeader, PageSkeleton } from "@/components/ui";
 import { useDialog, useToast } from "@/components/uiFeedback";
 import { clonePlan, listPlans } from "@/lib/plan/data";
 import { fmtDT } from "@/lib/plan/format";
 import { refreshOpenPlans } from "@/lib/plan/store";
 import type { Plan } from "@/lib/plan/types";
+import { useSaveAsTemplate } from "./useSaveAsTemplate";
 
 const MONTH = new Intl.DateTimeFormat("en-GB", { month: "long", year: "numeric" });
 
@@ -20,6 +22,7 @@ export default function Memory() {
   const router = useRouter();
   const toast = useToast();
   const dialog = useDialog();
+  const toTemplate = useSaveAsTemplate();
   const [rows, setRows] = useState<Plan[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [q, setQ] = useState("");
@@ -64,7 +67,7 @@ export default function Memory() {
 
   return (
     <>
-      <PageHeader eyebrow="Plans" title="Memory" subtitle="Closed plans, read-only. Clone one to reuse its tasks, subtasks and branches." />
+      <PageHeader eyebrow="Plans" title="Memory" subtitle="Closed plans, read-only. Clone one to reuse it now, or save a good one as a template for later." />
       <div className="relative mb-4 max-w-md">
         <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-faint" />
         <input className="input !pl-9" placeholder="Search titles and descriptions…" value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search closed plans" />
@@ -104,12 +107,15 @@ export default function Memory() {
                             {p.description ? ` · ${p.description}` : ""}
                           </span>
                         </Link>
-                        <span className="flex gap-1.5">
+                        <span className="flex flex-wrap gap-1.5">
                           <Link className="btn btn-ghost btn-sm" href={`/?plan=${p.id}`}>
                             <Eye size={14} /> View
                           </Link>
                           <button className="btn btn-sm" onClick={() => clone(p)}>
                             <Copy size={14} /> Clone
+                          </button>
+                          <button className="btn btn-sm" onClick={() => toTemplate(p)} title="Keep this plan as a reusable template">
+                            <LayoutTemplate size={14} /> Save as template
                           </button>
                         </span>
                       </li>

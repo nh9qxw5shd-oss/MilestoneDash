@@ -4,6 +4,7 @@ import { sb } from "@/lib/supabase";
 import { groupKey } from "./branches.ts";
 import type { BranchState, Edge, Plan, PlanSettings, PlanStatus, Subtask, Task } from "./types.ts";
 import { EMPTY_SETTINGS } from "./types.ts";
+import { nextTemplateId } from "./format.ts";
 
 function check<T>(res: { data: T | null; error: { message: string } | null }, what: string): T {
   if (res.error) throw new Error(`${what}: ${res.error.message}`);
@@ -48,9 +49,9 @@ export async function deleteTemplate(id: string): Promise<void> {
   check(await sb().from("plans").delete().eq("id", id).eq("status", "template"), "Deleting template");
 }
 
-/** A fresh open plan with the source's tasks, subtasks and links (completions and N/A reset). */
-export async function clonePlan(sourceId: string, title: string, description: string): Promise<Plan> {
-  const plan = await createPlan(title, description, "open");
+/** A fresh open plan (or template) with the source's tasks, subtasks and links (completions and N/A reset). */
+export async function clonePlan(sourceId: string, title: string, description: string, status: "open" | "template" = "open"): Promise<Plan> {
+  const plan = await createPlan(title, description, status);
   const src = (check(await sb().from("tasks").select("*").eq("plan_id", sourceId).order("task_number", { ascending: true }), "Reading tasks") ?? []) as Task[];
   const map = new Map<string, string>();
   for (const t of src) {
@@ -211,4 +212,10 @@ export async function countViewers(planId: string): Promise<number | null> {
   const { data, error } = await sb().from("plan_viewers").select("viewer_id").eq("plan_id", planId).gte("last_seen", since);
   if (error) return null;
   return new Set((data ?? []).map((r: { viewer_id: string }) => r.viewer_id)).size;
+}
+
+/** A closed (or any) plan saved as a reusable template: next MT id, tasks, subtasks, durations and branches. */
+export async function saveAsTemplate(sourceId: string, name: string): Promise<Plan> {
+  const id = nextTemplateId(await templateTitles());
+  return clonePlan(sourceId, `${id} - ${name.trim()}`, "", "template");
 }
