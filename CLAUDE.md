@@ -18,6 +18,10 @@ Incident milestone plans; see README.md for what it does.
   hostname too; the root, `/index.html` and `/?share=<id>` redirect there.
   `public/storage-bridge.html` is byte-identical across systems; change all or none. Vercel
   framework comes from `vercel.json`.
+- Overseer is the only way in (27 Oct): the Vercel project has no domain and is reached only through
+  `overseer.derbycontrol.co.uk/milestones` (PotatOS docs/09 §4.6). The last redirect in `next.config` sends a page
+  load without Overseer's `x-overseer-hop` marker to the same address on Overseer. Absolute links
+  this system hands out use `https://overseer.derbycontrol.co.uk/milestones/…`. Do not add a domain.
 
 ## Design language
 Autumn Hub house style (`nh9qxw5shd-oss/autumn-hub`, `web/src/`): the stylesheet, `ui.tsx` and

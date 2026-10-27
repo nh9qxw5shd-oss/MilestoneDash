@@ -24,13 +24,12 @@ import TaskEditDrawer from "./TaskEditDrawer";
 import { useSaveAsTemplate } from "./useSaveAsTemplate";
 
 const NO_KEYS: string[] = [];
-const STANDALONE = "https://milestone.derbycontrol.co.uk";
+const OVERSEER = "https://overseer.derbycontrol.co.uk";
 const BASE = process.env.NEXT_PUBLIC_BASE_PATH ?? "";
 
-/** Live view link: on the hub it points at the standalone site so it can go to anyone. */
+/** Live view link, on Overseer (the only address): the share page opens without sign-in, so it can go to anyone. */
 export function shareUrl(planId: string): string {
-  const origin = typeof window !== "undefined" && !/overseer\./.test(window.location.hostname) ? window.location.origin : STANDALONE;
-  return `${origin}${BASE}/share/${planId}`;
+  return `${OVERSEER}${BASE}/share/${planId}`;
 }
 
 async function copyText(text: string): Promise<boolean> {
